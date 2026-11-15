@@ -1,4 +1,4 @@
-import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, onSnapshot, serverTimestamp, Timestamp } from '@react-native-firebase/firestore';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocFromCache, updateDoc, query, where, orderBy, limit, onSnapshot, serverTimestamp, Timestamp } from '@react-native-firebase/firestore';
 import { config } from '@/lib/config';
 import { EVENT_STATUSES, LANGUAGES, type EventInput, type EventModel, type EventStatus } from '@/types/models';
 
@@ -97,5 +97,15 @@ export async function getEvent(id: string, uid: string) {
   const event = mapEvent(snapshot.id, snapshot.data() ?? {});
   if (event.ownerId !== uid)
     throw new Error('Event is not available');
+  return event;
+}
+
+
+/** Export must be usable with just the metadata already opened on this phone. */
+export async function getCachedEvent(id: string, uid: string) {
+  const snapshot = await getDocFromCache(doc(getFirestore(),'events',id));
+  if (!snapshot.exists()) return null;
+  const event = mapEvent(snapshot.id,snapshot.data() ?? {});
+  if (event.ownerId !== uid) throw new Error('Event is not available');
   return event;
 }

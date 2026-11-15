@@ -1,11 +1,11 @@
-# WhisprPersonal Android · Phase 5
+# WhisprPersonal Android
 
 Android-only Expo SDK 58 development-build app. Strict TypeScript, Expo Router in
 `src/app`, light/dark themes, email/password Firebase Auth, owner-filtered Firestore
 events, laptop health/sign-in checks, SecureStore offline passes, QR scanning and
 local preferences, continuous recording, overlapping WAV chunks, a durable SQLite upload
-queue and crash recovery are implemented. Live transcripts are Phase 6; expanded library
-tools are Phase 9.
+queue and crash recovery are implemented. Live transcripts, notes, briefs, read-only review, Markdown/TXT export, vocabulary,
+session deletion and diagnostics are implemented. Phase 9 hardware verification is pending.
 
 Audio is intended to go only to your laptop. Transcripts and notes sync to your
 Firebase. Cloud AI is optional, with local-only privacy and no cleanup as defaults.
@@ -37,8 +37,8 @@ microphone permission is requested only when Start is pressed after session cons
 A release APK builds locally with **every cache and temp file on E:**
 (`scripts/windows-build/build-apk.ps1`): Android SDK copy, Gradle home, npm cache, TEMP
 and `ANDROID_USER_HOME` all live in `E:\whispr-build-cache`. Verified result: `BUILD
-SUCCESSFUL in 7m 27s` (2026-11-16), `app-release.apk` (45.7 MB, `arm64-v8a` only, debug-signed,
-`com.aditya.whisprpersonal` 0.8.0, versionCode 8).
+SUCCESSFUL in 7m 35s` (2026-11-16), `app-release.apk` (45.8 MB, `arm64-v8a` only, debug-signed,
+`com.aditya.whisprpersonal` 0.9.0, versionCode 9).
 
 Three Windows problems had to be fixed:
 
@@ -338,3 +338,9 @@ job backoff/restart, SQLite/memory parity, Firestore serialization and UI consen
 Run the existing typecheck, lint and Jest commands plus the local rules emulator tests.
 Native-device layout, large-font, screen-reader and airplane-mode/restart QA remain part
 of release verification.
+
+
+Phase 9 workflows, EAS preview builds and sideloading are documented in
+[setup](../docs/setup.md); run [the test plan](../docs/test-plan.md) and
+[event rehearsal](../docs/event-runbook.md) before event use. expo-sharing is used only
+for outbound shares; no share-target config plugin is registered.

@@ -331,3 +331,36 @@ All HTTP errors retain the existing `{error:{code,message,request_id}}` envelope
 Provider status fields are `{status,model,last_error_kind}`. Status is `not_configured`,
 `ready`, `degraded`, `circuit_open`, or `auth_failed`. `ready` means locally eligible, not
 remotely verified. `/health` includes these statuses plus `configured` and never probes.
+
+
+## POST /api/v1/export
+
+Protected by the shared server key plus Firebase token or offline grant, with the same
+per-user rate limit as other protected endpoints. Owner-only; every requested session
+must belong to the caller and the specified event, otherwise 404 without partial output.
+No provider, Firestore or notes/brief lookup occurs.
+
+```json
+{"event_id":"event1","session_ids":["session1"],"format":"md","text":"raw","title":null}
+```
+
+`session_ids` contains 1-20 document ids; `format` is `md` or `txt`; `text` defaults to
+`raw` and may be `polished`; `title` is optional/null and at most 200 characters. Invalid
+input uses the normal 422 error envelope. Unconfigured auth fails closed with 503.
+
+Success is the UTF-8 document, with `Content-Type: text/markdown; charset=utf-8` or
+`text/plain; charset=utf-8` and `Content-Disposition: attachment;
+filename="<safe-title-or-event>-transcript.<ext>"`. The filename uses bounded ASCII letters,
+digits, underscore and hyphen; path characters/control characters are removed/replaced.
+The title/event, UTC export time, session creation times, actual model and transcript_status
+precede sequential stitched text lines `[hh:mm:ss] text`. Language changes use named markers
+such as `— Kannada —`. Missing, queued, processing or failed parts appear as
+`[part not transcribed]`; no-speech rows are omitted. Polished mode has a top AI-cleaned
+note, uses accepted polished_text and labels raw fallback ` (not cleaned)`. No AI runs as
+part of export and raw data remains unchanged. An audit_log action `transcript_exported`
+is written. Phone exports add local event metadata, owner notes and an explicitly chosen
+saved brief; the laptop has none of those note/brief records.
+
+Session deletion remains `DELETE /api/v1/sessions/{id}`. A processing chunk returns 409
+`session_busy`. Phone clients treat 404 as already gone; offline phone-only deletion queues
+an owner-scoped pending server delete for later retry. Event notes are not removed.

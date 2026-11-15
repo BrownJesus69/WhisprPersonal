@@ -5,6 +5,16 @@ import type { LanguageMode, PersistedEvent } from '../live/events';
 
 /** Mirrors uniqueness and atomic progress updates for offline tests. */
 export class MemoryRepositories implements Repositories {
+  private deletes = new Map<string, import('./repositories').PendingServerDelete>();
+  async pendingServerDeletes(owner: string) { return structuredClone([...this.deletes.values()].filter(d => d.owner_uid === owner)); }
+  async clearServerDelete(id: string, owner: string) { if (this.deletes.get(id)?.owner_uid === owner) this.deletes.delete(id); }
+  async deleteSessionRows(id: string, owner: string, pending: boolean) {
+    const s = this.sessionRows.get(id); if (!s || s.owner_uid !== owner) return;
+    if (pending) this.deletes.set(id,{ session_id: id, event_id: s.event_id, owner_uid: owner });
+    for (const rows of [this.chunkRows,this.transcripts,this.languages,this.events]) for (const [key,row] of rows) if (row.session_id === id) rows.delete(key);
+    for (const [key,job] of this.jobs) if (job.owner_uid === owner && job.session_ids.includes(id)) this.jobs.delete(key);
+    this.sessionRows.delete(id);
+  }
   private jobs = new Map<string, AIJob>();
   private drafts = new Map<string, BriefDraft>();
   async putAIJob(job: AIJob) {

@@ -22,7 +22,11 @@ export interface LocalChunk {
   status: ChunkStatus; server_status: string | null; attempts: number; next_attempt_at: number;
   last_error: string | null; local_deleted: number; created_at: string; updated_at: string;
 }
+export interface PendingServerDelete { session_id: string; event_id: string; owner_uid: string }
 export interface SessionRepo {
+  deleteSessionRows(id: string, owner: string, pending: boolean): Promise<void>;
+  pendingServerDeletes(owner: string): Promise<PendingServerDelete[]>;
+  clearServerDelete(id: string, owner: string): Promise<void>;
   sessions(owner: string): Promise<LocalSession[]>;
   session(id: string): Promise<LocalSession | null>;
   putSession(session: LocalSession): Promise<void>;
@@ -116,6 +120,18 @@ async function update(db: SQLiteDatabase, table: string, key: string, id: string
 }
 export class SQLiteRepositories implements Repositories {
   constructor(private db: SQLiteDatabase) {}
+  pendingServerDeletes(owner: string) { return this.db.getAllAsync<PendingServerDelete>('SELECT * FROM pending_server_deletes WHERE owner_uid=?',owner); }
+  async clearServerDelete(id: string, owner: string) { await this.db.runAsync('DELETE FROM pending_server_deletes WHERE session_id=? AND owner_uid=?',id,owner); }
+  async deleteSessionRows(id: string, owner: string, pending: boolean) {
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      const session = await tx.getFirstAsync<LocalSession>('SELECT * FROM recording_sessions WHERE id=? AND owner_uid=?',id,owner);
+      if (!session) return;
+      if (pending) await tx.runAsync('INSERT OR IGNORE INTO pending_server_deletes VALUES (?,?,?)',id,session.event_id,owner);
+      for (const table of ['chunks','transcript_chunks','stream_events','language_events']) await tx.runAsync(`DELETE FROM ${table} WHERE session_id=?`,id);
+      await tx.runAsync('DELETE FROM ai_jobs WHERE owner_uid=? AND EXISTS (SELECT 1 FROM json_each(ai_jobs.session_ids) WHERE value=?)',owner,id);
+      await tx.runAsync('DELETE FROM recording_sessions WHERE id=? AND owner_uid=?',id,owner);
+    });
+  }
   async putAIJob(job: AIJob) {
     const row = { ...job, session_ids: JSON.stringify(job.session_ids) };
     await this.db.runAsync(`${insertSql('ai_jobs', row)} ON CONFLICT(job_id) DO UPDATE SET status=excluded.status,error_code=excluded.error_code,updated_at=excluded.updated_at`, values(row));

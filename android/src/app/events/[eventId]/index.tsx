@@ -34,6 +34,8 @@ export default function EventDetail() {
     {event && <>
       <Button label={`Notes (${count.data?.filter(n => !n.deleted).length ?? 0})`} onPress={() => router.push({ pathname: '/events/[eventId]/notes', params: { eventId } })} />
       <Button label="Briefs" onPress={() => router.push({ pathname: '/events/[eventId]/brief', params: { eventId } })} />
+      <Button label="Export" onPress={() => router.push({ pathname: '/events/[eventId]/export', params: { eventId } })} />
+      <Button label="Vocabulary" onPress={() => router.push({ pathname: '/events/[eventId]/vocabulary', params: { eventId } })} />
       <StatusBadge status={event.status} />
       <Card>
         <KeyValueRow label="Description" value={event.description || '—'} />
@@ -52,7 +54,7 @@ export default function EventDetail() {
       }} />
       {startError && <Banner error message={startError} />}
       {sessions.error && <Banner error message="Could not load saved sessions." />}
-      {sessions.data?.map(s => <Button key={s.id} secondary label={`${new Date(s.created_at).toLocaleString()} · ${s.consent_at ? s.status : 'ready'}`} onPress={() => router.push({ pathname: '/session/[sessionId]', params: { sessionId: s.id } })} />)}
+      {sessions.data?.map(s => <Card key={s.id}><Button secondary label={`${new Date(s.created_at).toLocaleString()} · ${s.consent_at ? s.status : 'ready'}`} onPress={() => router.push({ pathname: '/session/[sessionId]', params: { sessionId: s.id } })} /><Button secondary label="View transcript" onPress={() => router.push({ pathname: '/transcript/[sessionId]', params: { sessionId: s.id } })} /></Card>)}
     </>}
   </Screen>;
 }

@@ -34,7 +34,7 @@ beforeAll(async () => {
 });
 afterAll(() => sql.close());
 test('migration 4 creates the exact AI storage columns', () => {
-  expect(sql.prepare('PRAGMA user_version').get()?.user_version).toBe(4);
+  expect(sql.prepare('PRAGMA user_version').get()?.user_version).toBe(5);
   for (const [table, keys] of Object.entries({ ai_jobs: Object.keys(aiJob()), brief_drafts: Object.keys(draft()) })) {
     expect(sql.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name).sort()).toEqual(keys.sort());
   }
@@ -83,4 +83,25 @@ test('draft insertion rolls back if terminal job persistence fails', async () =>
   await expect(sqlite.finishAIJob(aiJob({ job_id: 'rollback', status: 'done' }),draft({ id: 'rollback-draft' }))).rejects.toThrow();
   expect((await sqlite.briefDrafts('owner','event-1')).some(d => d.id === 'rollback-draft')).toBe(false);
   expect((await sqlite.aiJobs('owner')).find(j => j.job_id === 'rollback')?.status).toBe('queued');
+});
+
+
+test('session deletion is one atomic transaction, retains notes, and records server retry', async () => {
+  const id = 'delete-session';
+  await sqlite.putSession(session({ id }));
+  await sqlite.upsertTranscript(transcriptRow(id,finalData()));
+  await sqlite.putAIJob(aiJob({ job_id: 'delete-job',session_ids: [id] }));
+  sql.exec("CREATE TRIGGER fail_delete BEFORE DELETE ON recording_sessions WHEN OLD.id='delete-session' BEGIN SELECT RAISE(ABORT,'blocked'); END;");
+  await expect(sqlite.deleteSessionRows(id,'owner',true)).rejects.toThrow();
+  expect(await sqlite.transcript(id)).toHaveLength(1);
+  expect(await sqlite.pendingServerDeletes('owner')).toEqual([]);
+  expect((await sqlite.aiJobs('owner')).some(j => j.job_id === 'delete-job')).toBe(true);
+  sql.exec('DROP TRIGGER fail_delete');
+  await sqlite.deleteSessionRows(id,'other',true); expect(await sqlite.session(id)).not.toBeNull();
+  await sqlite.deleteSessionRows(id,'owner',true);
+  expect(await sqlite.session(id)).toBeNull(); expect(await sqlite.transcript(id)).toEqual([]);
+  expect((await sqlite.aiJobs('owner')).some(j => j.job_id === 'delete-job')).toBe(false);
+  expect(await sqlite.pendingServerDeletes('owner')).toEqual([{ session_id: id,event_id: 'event-1',owner_uid: 'owner' }]);
+  await sqlite.clearServerDelete(id,'other'); expect(await sqlite.pendingServerDeletes('owner')).toHaveLength(1);
+  await sqlite.clearServerDelete(id,'owner'); expect(await sqlite.pendingServerDeletes('owner')).toEqual([]);
 });

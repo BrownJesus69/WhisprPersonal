@@ -27,13 +27,16 @@ export class ServerClient {
   get<T>(path: string, options: Options = { auth: true }): Promise<T> {
     return this.request(path, undefined, options);
   }
+  delete<T>(path: string): Promise<T> {
+    return this.request(path, undefined, { auth: true }, false, false, false, true);
+  }
   post<T>(path: string, body?: unknown, options: Options = { auth: true }): Promise<T> {
     return this.request(path, body, options, true);
   }
   postMultipart<T>(path: string, form: FormData, options: { timeoutMs?: number } = {}): Promise<T> {
     return this.request(path, form, { ...options, auth: true }, true, false, true);
   }
-  private async request<T>(path: string, body: unknown, options: Options, post = false, retried = false, multipart = false): Promise<T> {
+  private async request<T>(path: string, body: unknown, options: Options, post = false, retried = false, multipart = false, deleting = false): Promise<T> {
     if (!path.startsWith('/') || path.startsWith('//') || path.includes('://'))
       throw new ServerError(0, 'invalid_path', 'Invalid server endpoint');
     const headers: Record<string, string> = multipart ? {} : { 'Content-Type': 'application/json' };
@@ -50,7 +53,7 @@ export class ServerClient {
     let data: unknown;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
-        method: post ? 'POST' : 'GET',
+        method: deleting ? 'DELETE' : post ? 'POST' : 'GET',
         headers,
         body: body === undefined ? undefined : multipart ? body as FormData : JSON.stringify(body),
         signal: controller.signal
@@ -69,7 +72,7 @@ export class ServerClient {
         ? envelope.error.code : 'server_error';
       if (code === 'auth_token_expired' && options.auth && !retried) {
         await this.deps.onAuthExpired();
-        return this.request(path, body, options, post, true, multipart);
+        return this.request(path, body, options, post, true, multipart, deleting);
       }
       const retry = response.headers.get('Retry-After');
       const parsedSeconds = retry ? (Number.isFinite(Number(retry)) ? Math.max(0, Number(retry)) : Math.max(0, Math.ceil((Date.parse(retry) - Date.now()) / 1000))) : undefined;

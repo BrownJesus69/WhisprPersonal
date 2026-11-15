@@ -1,6 +1,10 @@
+import { deleteSession, LaptopUnavailable } from '@/lib/session/deleteSession';
+import { deleteAudio, listChunkFiles, removeParts } from '@/lib/audio/chunkFiles';
+import { authedClient } from '@/lib/server/authedClient';
+import { aiRuntime } from '@/lib/ai/runtime';
 import { CleanupControl } from '@/components/CleanupControl';
 import { useEffect, useState } from 'react';
-import { Platform, ScrollView, Text, ToastAndroid, View } from 'react-native';
+import { Alert, Platform, ScrollView, Text, ToastAndroid, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { QuickNote } from '@/components/QuickNote';
 import { createNote } from '@/lib/notes/notes';
@@ -34,6 +38,7 @@ export default function SessionScreen() {
   const uid = useAuthStore(s => s.user?.uid);
   const connection = useConnectionStore(s => s.status);
   const recording = useRecordingStore();
+  const [deleting,setDeleting] = useState(false);
   const [tab, setTab] = useState<'raw' | 'polished'>('raw');
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
@@ -62,6 +67,26 @@ export default function SessionScreen() {
   const phase = own ? recording.phase : !session?.consent_at || recovered ? 'ready' : 'stopped';
   const elapsed = own ? recording.elapsedMs : session?.time_ms ?? 0;
   const act = (action: () => Promise<unknown>) => { void action().catch(() => setError('Could not update this session. Please reopen it and try again.')); };
+  const removeSession = async (phoneOnly = false) => {
+    if (!uid) return;
+    setDeleting(true);
+    try {
+      await uploadService.stop(); await aiRuntime.stop(); liveController.stopRuntime();
+      const state = useRecordingStore.getState();
+      await deleteSession({ repo: await repositories(), client: authedClient(uid), owner: uid, id: sessionId,
+        activeId: state.sessionId, phase: state.phase, phoneOnly, removeFile: deleteAudio,
+        removeOrphans: id => { for (const f of listChunkFiles(id)) f.delete(); removeParts(id); } });
+      await client.invalidateQueries({ queryKey: ['local-sessions',uid] }); router.back();
+    } catch (e) {
+      if (e instanceof LaptopUnavailable) Alert.alert('Delete on this phone only?', 'The laptop copy remains. Its deletion is queued and retried automatically when the upload service reconnects. Event notes are kept. Phone deletion cannot be undone.', [
+        { text: 'Cancel', style: 'cancel' }, { text: 'Delete on this phone only', style: 'destructive', onPress: () => { void removeSession(true); } }
+      ]);
+      else setError(e instanceof Error ? e.message : 'Could not delete this session. Try again.');
+    } finally {
+      setDeleting(false); liveController.startRuntime();
+      if (useAuthStore.getState().user?.uid === uid) { void uploadService.start(uid); void aiRuntime.start(uid); }
+    }
+  };
   return <Screen scroll={false} title={event.data?.title ?? 'Recording session'}>
     {query.isPending && <Banner message="Loading saved audio…" />}
     {(query.error || error) && <Banner error message={error || 'Could not open this local session.'} />}
@@ -101,6 +126,9 @@ export default function SessionScreen() {
         await liveController.setOverride(sessionId, mode);
         if (Platform.OS === 'android') ToastAndroid.show('Applies from the next chunk', ToastAndroid.SHORT);
       })} />}
+      <Button secondary label="Delete session" loading={deleting} disabled={own && ['recording','paused','stopping','requesting_permission','error'].includes(recording.phase)} onPress={() => Alert.alert('Delete session?', 'Deletes session audio and transcript from this phone and the laptop. This cannot be undone. Event notes and saved briefs are kept.', [
+        { text: 'Cancel', style: 'cancel' }, { text: 'Delete session', style: 'destructive', onPress: () => { void removeSession(); } }
+      ])} />
       <CleanupControl session={session} privacy={event.data?.privacyMode} />
       </ScrollView>
       <TranscriptTabs selected={tab} onSelect={setTab} />

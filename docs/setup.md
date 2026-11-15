@@ -1,4 +1,4 @@
-# Server setup
+# WhisprPersonal setup
 
 Use Python 3.11+ (the development environment uses 3.12). Docker users need Docker Engine
 or Docker Desktop with Compose v2. Windows launchers support Windows PowerShell 5.1;
@@ -26,7 +26,7 @@ builds and starts the service, polls health for up to 180 seconds, waits up to 2
 and Tailscale URLs, prints a LAN QR, and opens docs. Windows prefers a DHCP LAN address and
 excludes virtual/Tailscale adapters; Linux uses `hostname -I` and macOS uses `en0`. On Linux,
 check the printed address if multiple physical/virtual interfaces exist. The QR contains
-only a connection URL. Android scanning/recording is unavailable until later phases.
+only a connection URL. The Android app scans the URL and records locally; enter the key separately.
 
 Manual equivalents, after privately creating `server/.env` from the example:
 
@@ -102,14 +102,14 @@ remain `not_configured`; configured providers report `configured_unchecked` with
 | GROQ_API_KEY | empty | Optional SecretStr |
 | GROQ_BASE_URL | https://api.groq.com/openai/v1 | Reserved provider endpoint |
 | GROQ_MODEL | empty | Choose a model your account can access; [provider docs](https://console.groq.com/docs) |
-| GROQ_TIMEOUT_S | 30 | Positive future provider timeout |
-| GROQ_MAX_CONCURRENCY | 2 | Positive future concurrency bound |
+| GROQ_TIMEOUT_S | 30 | Provider timeout in seconds |
+| GROQ_MAX_CONCURRENCY | 2 | Provider concurrency bound |
 | GROQ_MAX_RPM | empty | Optional positive account-specific limit; no quota assumed |
 | SAMBANOVA_API_KEY | empty | Optional SecretStr |
 | SAMBANOVA_BASE_URL | https://api.sambanova.ai/v1 | Reserved provider endpoint |
 | SAMBANOVA_MODEL | empty | Choose a model your account can access; [provider docs](https://docs.sambanova.ai/) |
-| SAMBANOVA_TIMEOUT_S | 30 | Positive future provider timeout |
-| SAMBANOVA_MAX_CONCURRENCY | 2 | Positive future concurrency bound |
+| SAMBANOVA_TIMEOUT_S | 30 | Provider timeout in seconds |
+| SAMBANOVA_MAX_CONCURRENCY | 2 | Provider concurrency bound |
 | SAMBANOVA_MAX_RPM | empty | Optional positive account-specific limit; no quota assumed |
 | LOCAL_LLM_BASE_URL | empty | Optional local endpoint |
 | LOCAL_LLM_MODEL | empty | Both local URL and model required for configured=true |
@@ -182,8 +182,8 @@ an unloaded model is expected only when preload is disabled.
 
 ## Firebase identity and Firestore
 
-Enable the intended sign-in provider(s) in the Firebase console; provider selection and
-phone sign-in UI are decided in Phase 4. Store the service account locally under git-ignored
+Enable **Email/Password** under Firebase console > Authentication > Sign-in method.
+Google Sign-In remains disabled until its feature flag and native configuration are enabled. Store the service account locally under git-ignored
 `secrets/`. Never include it in an app bundle or commit it. For non-Docker use, set
 `FIREBASE_CREDENTIALS_PATH` to its absolute local path in your private environment or server
 configuration. Docker uses the existing read-only secret mount. Startup parses the local
@@ -196,7 +196,7 @@ with a safe reason; token verification remains disabled and protected requests f
 Deploy rules and indexes using the instructions in [firebase/README.md](../firebase/README.md):
 
 ```sh
-firebase deploy --only firestore:rules,firestore:indexes --project <your-project-id>
+npx firebase-tools deploy --only firestore:rules,firestore:indexes --project <id>
 ```
 
 Initially empty allowlists allow any verified user of this Firebase project who has the
@@ -215,8 +215,8 @@ While online, sign in with Firebase and POST `/api/v1/auth/grant` using the serv
 fresh Firebase ID token. Keep the returned grant in `expo-secure-store` on the client;
 send it as Bearer for HTTP and WebSocket requests. GET `/api/v1/auth/check` then reports
 `auth_method=grant` and `grant_expires_at` (Unix seconds). Ensure expiry covers the event.
-Create the event/session and load vocabulary before disconnecting; those operations
-still verify parent-event ownership through Firestore.
+Create/open the event and load vocabulary before disconnecting. Ownership checks tolerate
+Firestore outages for local transcription; unknown ownership defers cloud writes.
 
 `AUTH_GRANT_ENABLED=true` and `AUTH_GRANT_TTL_HOURS=12` are defaults (TTL bounds 1-24).
 Leave `AUTH_GRANT_SIGNING_KEY` empty to generate/reuse `DATA_DIR/grant_signing.key`.
@@ -297,3 +297,77 @@ owner notes. `*_TIMEOUT_S` and `*_MAX_CONCURRENCY` bound provider operations;
 `*_MAX_RPM` is an optional local cap and remains unset by default. No additional dependency
 or model download is needed for the AI layer. With no provider configured, submissions for
 verified cloud-enabled events return `provider_unavailable` while raw transcripts stay intact.
+
+
+## Android APK build and installation
+
+Prerequisites: installed project dependencies, Node compatible with this Expo SDK, the
+owner's Firebase Android client configuration, and a phone with microphone permission.
+The client package is fixed to `com.aditya.whisprpersonal`. Never publish the service
+account or provider keys with the APK. A native rebuild is required for expo-sharing;
+do not add its config plugin, which would register an incoming share target.
+
+### Local Windows build on E:
+
+Use `android/scripts/windows-build/build-apk.ps1` and the cache/bootstrap instructions in
+[android/README.md](../android/README.md#local-native-builds-on-this-laptop-verified-2026-11-15).
+This keeps SDK, Gradle, npm and temporary build paths on E:. Review that guide's memory,
+CMake path and pagefile notes first. Do not hand-edit generated native projects.
+
+### EAS preview APK
+
+Run these owner actions from `android/` while online (they were not executed as part of
+Phase 9). EAS uploads build input to Expo; review what is being uploaded privately.
+
+```powershell
+npx eas-cli@latest login
+npx eas-cli@latest init
+```
+
+`app.config.js` is dynamic. Add the printed `extra.eas.projectId` to its returned config
+manually, preserving the existing `extra` values. Upload the Firebase client config as a
+secret file variable and build the preview profile:
+
+```powershell
+npx eas-cli@latest env:set --name GOOGLE_SERVICES_JSON --type file --value ./app/google-services.json --visibility secret --environment preview
+npx eas-cli@latest build -p android --profile preview
+```
+
+The preview profile produces an APK. Ensure the dynamic config uses
+`process.env.GOOGLE_SERVICES_JSON` when provided by EAS, with the existing local client
+configuration path as the local-build fallback. Never paste client configuration into a
+command or commit a secret file. Check [eas.json](../android/eas.json) before building.
+
+### Sideload
+
+Install the downloaded APK over USB with `adb install -r <apk>`, or open the EAS build URL
+on the phone and download/install it. For the browser or file manager doing installation,
+enable Android Settings > Install unknown apps. Play Protect may warn about debug-signed
+builds; verify the APK source before accepting any warning. Local builds currently use a
+debug signature. An update must use the same signing identity; increase `android.versionCode`
+for each newer install over an older release. Different signing identities require an
+explicit uninstall (which removes phone data) or rebuilding with the correct identity.
+
+## Phone connection and first recording
+
+Start the laptop and wait for model readiness. Keep both devices on the same trusted
+Wi-Fi/hotspot without client isolation. Scan QR from Connect laptop, or enter its LAN host
+and port; enter the shared key privately. Test connection and sign-in and inspect pass
+expiry in Settings. On a physical phone localhost points to the phone; the Android emulator
+can reach its host at `10.0.2.2`. For Tailscale, sign both devices into the intended tailnet,
+allow the peer/port, and use the laptop's Tailscale address. Public router port forwarding
+is unnecessary and unsafe. Test after laptop restart with internet disabled.
+
+| Problem | Action |
+| --- | --- |
+| Laptop unavailable | Check power, server process, Wi-Fi/client isolation, host/port and Private firewall rule; test Tailscale peer access |
+| Sign-in disabled | Owner enables Email/Password in Firebase console and checks the project's client configuration |
+| Protected endpoints return 503 | Configure shared secret and Firebase service locally; inspect safe diagnostics, never share credentials |
+| Pass expired offline | Reconnect internet and renew sign-in; phone audio stays queued |
+| Model not ready / CUDA error | Pre-download model, verify NVIDIA driver/CUDA runtime and DLL setup; CPU is slower; preserve `av==17.0.0` |
+| Firestore permission/index error | Owner deploys rules and indexes to the correct project; verify event ownership |
+| AI not configured | Configure provider key AND an accessible model, or local endpoint/model; raw transcription still works |
+| APK will not update | Check signing identity and increase versionCode; preserve recordings before any uninstall |
+| Share unavailable | Install/enable a receiving app and rebuild the native APK with expo-sharing |
+| Recording stops when locked | Check microphone/notification permission, battery optimization and OEM restrictions; rehearse on the actual phone |
+| Laptop copy pending deletion | Reconnect with the same account and laptop, reopen app, check diagnostics pending server deletes reaches zero |

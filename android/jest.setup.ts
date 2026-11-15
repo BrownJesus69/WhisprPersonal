@@ -19,6 +19,7 @@ jest.mock('@react-native-firebase/firestore', () => ({
     path === undefined ? { path: `${parent.path}/event-1`, id: 'event-1' } : { path, id }),
   addDoc: jest.fn(async () => ({ id: 'event-1' })),
   getDoc: jest.fn(),
+  getDocFromCache: jest.fn(),
   getDocFromServer: jest.fn(async () => ({ exists: () => false, data: () => undefined, metadata: { hasPendingWrites: false, fromCache: false } })),
   setDoc: jest.fn(async () => undefined),
   updateDoc: jest.fn(async () => undefined),
@@ -79,6 +80,7 @@ jest.mock('expo-crypto', () => ({
     return Uint8Array.from(hash).buffer;
   })
 }));
+jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(async () => true), shareAsync: jest.fn(async () => {}) }));
 jest.mock('expo-file-system', () => {
   const files = new Map<string, Uint8Array>();
   const dirs = new Set<string>();
@@ -88,6 +90,8 @@ jest.mock('expo-file-system', () => {
     constructor(...parts: ({ uri: string } | string)[]) { this.uri = uri(parts); }
     get name() { return this.uri.split('/').pop()!; }
     get exists() { return files.has(this.uri); }
+    modificationTime: number | null = Date.now();
+    async write(content: string) { files.set(this.uri, Uint8Array.from([...content].map(c => c.charCodeAt(0)))); }
     get size() { return files.get(this.uri)?.length ?? 0; }
     create() { files.set(this.uri, new Uint8Array()); }
     delete() { files.delete(this.uri); }
@@ -114,10 +118,10 @@ jest.mock('expo-file-system', () => {
     create() { dirs.add(this.uri); }
     list() { return [...files.keys()].filter(p => p.startsWith(this.uri + '/') && !p.slice(this.uri.length + 1).includes('/')).map(p => new File(p)); }
   }
-  return { File, Directory, Paths: { document: { uri: 'file:///documents' }, availableDiskSpace: 10 * 1024 ** 3 } };
+  return { File, Directory, Paths: { cache: { uri: 'file:///cache' }, totalDiskSpace: 20 * 1024 ** 3, document: { uri: 'file:///documents' }, availableDiskSpace: 10 * 1024 ** 3 } };
 });
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { version: '0.5.0', sdkVersion: '58', extra: { features: { googleSignIn: false }, consentVersion: '2026-11-15' } } } }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() }, useSegments: () => [], useLocalSearchParams: () => ({}) }));
+jest.mock('expo-router', () => ({ router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() }, useSegments: () => [], useLocalSearchParams: jest.fn(() => ({})) }));
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 // All network access is denied unless a test supplies a controlled fetch implementation.
 beforeEach(() => {

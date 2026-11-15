@@ -97,5 +97,10 @@ async function open() {
       PRAGMA user_version = 4;
     `);
   });
+  if ((version?.user_version ?? 0) < 5) await db.withExclusiveTransactionAsync(async tx => {
+    await tx.execAsync(`CREATE TABLE pending_server_deletes (
+      session_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, owner_uid TEXT NOT NULL
+    ); PRAGMA user_version = 5;`);
+  });
   return db;
 }

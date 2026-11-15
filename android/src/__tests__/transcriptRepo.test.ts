@@ -82,7 +82,7 @@ test('real SQLite migration 1→2, idempotent revision, cursor rollback, and res
   jest.mocked(openDatabaseAsync).mockResolvedValue(adapter as unknown as SQLiteDatabase);
   try {
     const db = await database(); // Runs actual production migrations against in-memory SQLite.
-    expect(sql.prepare('PRAGMA user_version').get()?.user_version).toBe(4);
+    expect(sql.prepare('PRAGMA user_version').get()?.user_version).toBe(5);
     const repo = new SQLiteRepositories(db); await repo.putSession(session());
     expect(await repo.session('existing_phase5')).toMatchObject({ last_event_seq: 0, language_override: 'auto', override_from_sequence: null, status: 'recording' });
     failCursor = true; await expect(repo.persistEvent(finalEvent(1))).rejects.toThrow('Simulated write failure');

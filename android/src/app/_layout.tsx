@@ -99,6 +99,10 @@ export default function RootLayout() {
               <Stack.Screen name="events/[eventId]/index" options={{ title: 'Event' }} />
               <Stack.Screen name="events/[eventId]/brief" options={{ title: 'Briefs' }} />
               <Stack.Screen name="events/[eventId]/notes" options={{ title: 'Notes' }} />
+              <Stack.Screen name="events/[eventId]/export" options={{ title: 'Export' }} />
+              <Stack.Screen name="events/[eventId]/vocabulary" options={{ title: 'Vocabulary' }} />
+              <Stack.Screen name="transcript/[sessionId]" options={{ title: 'Transcript' }} />
+              <Stack.Screen name="diagnostics" options={{ title: 'Diagnostics' }} />
               <Stack.Screen name="search" options={{ title: 'Search' }} />
               <Stack.Screen name="session/[sessionId]" options={{ title: 'Recording session' }} />
             </Stack.Protected>

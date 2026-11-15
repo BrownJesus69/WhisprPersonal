@@ -1,3 +1,4 @@
+import { retryServerDeletes } from '@/lib/session/deleteSession';
 import { AppState } from 'react-native';
 import { addNetworkStateListener } from 'expo-network';
 import { ServerError, ServerClient } from '@/lib/server/client';
@@ -37,7 +38,7 @@ export function nextWork(sessions: LocalSession[], chunks: LocalChunk[], now: nu
     .sort((a,b) => order.get(a.session_id)! - order.get(b.session_id)! || a.sequence - b.sequence)[0];
 }
 interface Dependencies {
-  repo: Repositories; client: Pick<ServerClient, 'post' | 'get' | 'postMultipart'>; owner: string;
+  repo: Repositories; client: Pick<ServerClient, 'post' | 'get' | 'postMultipart'> & Partial<Pick<ServerClient,'delete'>>; owner: string;
   now?: () => number; random?: () => number; deleteAfter: () => boolean;
   removeFile: (uri: string) => void | Promise<void>;
   connection: (status: 'connected' | 'error' | 'renew_required' | 'disconnected') => void;
@@ -133,6 +134,7 @@ export class UploadService {
   /** Testable single pass; production calls through the non-overlapping drain loop. */
   async tick(): Promise<boolean> {
     if (this.paused || this.cancelled) return false;
+    if (this.d.client.delete) await retryServerDeletes(this.d.repo,this.d.client as Pick<ServerClient,'delete'>,this.d.owner);
     const sessions = await this.d.repo.sessions(this.d.owner);
     let all = (await Promise.all(sessions.map(s => this.d.repo.chunks(s.id)))).flat();
     const c = nextWork(sessions, all, this.now());
@@ -203,7 +205,7 @@ export class UploadService {
     }
     all = (await Promise.all(sessions.map(s => this.d.repo.chunks(s.id)))).flat();
     const latest = await this.d.repo.sessions(this.d.owner);
-    return all.some(c => ['pending','uploading','uploaded'].includes(c.status)) || latest.some(s => ['stopped','finalizing'].includes(s.status) && s.finalize_status !== 'interrupted');
+    return (await this.d.repo.pendingServerDeletes(this.d.owner)).length > 0 || all.some(c => ['pending','uploading','uploaded'].includes(c.status)) || latest.some(s => ['stopped','finalizing'].includes(s.status) && s.finalize_status !== 'interrupted');
   }
   async retryFailed(sessionId: string) {
     if ((await this.d.repo.session(sessionId))?.owner_uid !== this.d.owner) return;

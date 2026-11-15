@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Switch } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -104,6 +105,7 @@ export default function Settings() {
       }}
     />
     <SectionHeader title="Diagnostics" />
+    <Button label="Open diagnostics" onPress={() => router.push('/diagnostics')} />
     <KeyValueRow label="App version" value={config.version} />
     <KeyValueRow label="Expo SDK" value={config.sdk} />
     <KeyValueRow label="Offline pass valid until" value={c.passExpiry ? new Date(c.passExpiry * 1000).toLocaleString() : 'No pass'} />

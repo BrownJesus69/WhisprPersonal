@@ -15,7 +15,7 @@ from app.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.request_context import RequestContextMiddleware
-from app.routers import ai, auth, diagnostics, health, sessions, stream, vocabulary
+from app.routers import ai, auth, diagnostics, export, health, sessions, stream, vocabulary
 from app.security.auth import DisabledTokenVerifier, TokenVerifier
 from app.security.body_limit import BodyLimitMiddleware
 from app.security.firebase_verifier import FirebaseTokenVerifier
@@ -144,6 +144,7 @@ def create_app(
         openapi_url="/openapi.json" if settings.enable_api_docs else None,
     )
     register_exception_handlers(app)
+    app.include_router(export.router)
     app.include_router(auth.router)
     app.include_router(ai.router)
     app.include_router(health.router)

@@ -1,21 +1,7 @@
-# Event runbook - Phase 3 preflight; full workflow in Phase 9
+# Event runbook
 
-## Prerequisites and access — completed in Phase 9
-
-## Before the event — completed in Phase 9
-
-## Network and device checks — completed in Phase 9
-
-## Start and monitor recording — completed in Phase 9
-
-## Troubleshooting and escalation — completed in Phase 9
-
-## Recovery and rollback — completed in Phase 9
-
-## Export and close the event — completed in Phase 9
-
-## Retention and cleanup — completed in Phase 9
-
+Use this with the owner account, charged phone and the configured laptop. Rehearse on the
+actual venue network and devices; code tests do not establish recording reliability.
 
 ## Sign-in and local model preflight
 
@@ -23,8 +9,8 @@ While online, sign in with Firebase and get a grant using POST `/api/v1/auth/gra
 the server key and a fresh Firebase ID token. Store it securely and switch the Bearer
 header to the grant. Call `/api/v1/auth/check`: confirm `auth_method=grant` and check
 `grant_expires_at` covers the event, including setup and wrap-up. Default TTL is 12 hours.
-Create the session and fetch vocabulary before going offline because those operations
-still use Firestore. Test a grant-authenticated reconnect after a laptop restart before
+Open/create the event and fetch vocabulary before going offline so ownership and metadata
+are cached. Unverified offline ownership defers cloud writes without stopping local capture. Test a grant-authenticated reconnect after a laptop restart before
 leaving connectivity. Preserve DATA_DIR (key and SQLite), cached models, and local LAN access.
 
 When online, renew proactively if less than two hours remain, using a fresh Firebase ID
@@ -40,7 +26,7 @@ if accurate profile will be used), enable local-only mode and restart. Confirm /
 model.status=ready, queue.status=running, and overall status=ok. Check diagnostics for
 safe errors and queue depth. Review the configured audio retention policy and free disk.
 
-## Language test ? before each event
+## Language test before each event
 
 1. Record a short sample in each configured language (default Kannada, Tamil, Hindi,
    English), including event names from vocabulary. Use at least 15 seconds of speech
@@ -61,7 +47,7 @@ safe errors and queue depth. Review the configured audio retention policy and fr
    backlog arrives; use force only when accepting a partial result. Verify the final
    transcript and Firestore sync status. failed cloud sync retries without retranscribing.
 
-## Phase 3 recovery
+## Laptop queue recovery
 
 For queue_full, wait Retry-After and retry the same ID/content. For failed transcription,
 inspect safe codes and retained audio privately; do not copy transcript/audio into logs.
@@ -110,7 +96,7 @@ or reopen it after connectivity returns to trigger retry; the laptop need not be
 
 The Library's **Search notes and transcripts** searches this account's saved phone data.
 Enter two or more characters and pause briefly. Each section shows up to 50 newest matches;
-note results open event notes, and transcript results open their recording session. Event
+note results open event notes, and transcript results open the read-only viewer at the matching part. Event
 notes also have their own search box. Kannada, Tamil and Hindi combining marks are retained;
 percent, underscore and backslash are searched as literal characters.
 
@@ -148,3 +134,122 @@ status. For a `local_only` event without an available local model, the app says 
 is off for this event**. Changing this requires an intentional event privacy decision.
 **The laptop restarted; request it again.** means the server interrupted a pending AI job;
 review the session and submit a new request yourself.
+
+
+## Before leaving for the venue
+
+- Charge phone, laptop and power banks. Bring laptop supply, USB cable, adapters and a
+  tested external microphone if used. Keep the laptop ventilated; avoid direct sun and bags.
+- Check free phone and laptop disk in Diagnostics; rehearse a recording long enough to
+  estimate storage for the event plus margin. Master audio remains until session deletion.
+- Pre-download models while online and restart in local-files-only mode. Run the language
+  tests above including mixed speech. Keep the desired model loaded and power connected.
+- Disable restrictive battery saver/optimization for recording as appropriate for this
+  phone. Check microphone and recording notification permissions. Lock the screen during
+  rehearsal and confirm duration, audio chunks and speech keep advancing after unlock.
+- Decide retention, privacy mode and whether cloud AI is permitted before recording.
+  Obtain informed consent from participants, including how audio and transcripts are kept.
+
+## At the venue: connection and vocabulary
+
+Use a trusted Wi-Fi router or a rehearsed hotspot; check client isolation does not block
+phone-to-laptop access. Avoid changing networks during capture. Keep a Tailscale fallback
+only if both devices and their permissions have already been tested. Start `server/start.bat`,
+scan its QR in Connect laptop, enter the key separately and test the connection. Check
+Diagnostics model ready, queue running, provider status, free disk and upload counts.
+
+Open the event > Vocabulary. Load the laptop list, tap **Add event speakers**, add names,
+places and jargon (up to 200 terms, 64 characters each), then **Save vocabulary**. Terms
+help Whisper spell future chunks; existing raw transcript text is unchanged. Reload to
+verify the saved list, then record the names and inspect the transcript.
+
+Renew/check the 12-hour offline pass while online; expiry must cover setup through export.
+Restart the laptop with internet disabled and confirm connection using that pass. Protect
+DATA_DIR, which contains its signing key. Load the event and saved briefs into phone cache.
+
+## Live recording and failure drills
+
+Confirm consent, start the session and speak a dated test phrase. Check elapsed time,
+level meter, new chunks, queue progress and transcript. Use a short manual language override
+if auto detection is wrong, then return to Auto when appropriate. Do not delete or reinstall
+the app during an event. Stop and finalize deliberately; finalizing waits for missing chunks.
+
+| Drill | Expected behavior and recovery |
+| --- | --- |
+| Laptop Wi-Fi drop | Phone keeps saving chunks. Restore the same route; upload retries and transcript reconnect resumes without duplicates |
+| Laptop restart | Keep DATA_DIR/model cache. Processing work requeues; wait for ready, reconnect with unexpired pass and check backlog drains |
+| App killed | Continuous capture may stop. Reopen, inspect recovered session/master audio, resume if offered or finish and start a new session; do not claim the missing interval was recorded |
+| Screen locked | Recording notification remains; unlock after several chunks and check elapsed time and transcript/audio continuity |
+| Battery saver | Confirm behavior on this phone; if capture stops, disable restrictions, recover saved audio and use external power |
+| Server queue full | Saved audio remains on phone; wait for queue capacity/Retry-After, avoid repeated manual requests and confirm automatic retry |
+| Low connectivity / WebSocket loss | Local audio and notes remain; HTTP catch-up and stream replay reconcile final text. Check actual gaps before exporting |
+| Expired pass offline | Keep recording locally; reconnect internet and renew sign-in before retrying laptop operations |
+| Low storage / thermal shutdown | Stop safely, preserve existing files and make space using reviewed retention/deletion; cool devices and start a new test before resuming |
+
+If recovery is uncertain, stop new work and preserve the phone data and laptop DATA_DIR.
+Inspect safe error codes in Diagnostics and record the affected session/time privately.
+Use a new session after recovery rather than overwriting evidence. Do not rotate keys or
+reinstall as a troubleshooting shortcut. Refer unresolved configuration/device issues to
+the owner with a diagnostics share, excluding audio/transcript excerpts unless authorized.
+
+## Export and close
+
+1. Stop each session. Leave the phone/laptop connected until upload and transcription finish.
+   Read the transcript viewer's status, missing/failed parts and language timeline. Search
+   names/numbers, listen to questionable source audio, and resolve note conflicts.
+2. Optionally clean up and generate/review/save a brief using the existing sections above.
+   Cloud AI needs live privacy verification; export and reading cached data work offline.
+3. Event > **Export**. Select sessions, Markdown or TXT, and Raw (default) or Cleaned.
+   Notes default on. Choose a saved brief explicitly to include its reviewed `finalText`.
+   PDF is disabled as **not available yet**. Tap **Export**, choose a trusted destination,
+   then open the received file and check beginning/end, Unicode, gaps and chosen sections.
+4. For a laptop-only transcript, use authenticated `POST /api/v1/export` with event_id,
+   1-20 owned session_ids, format md/txt, optional title and text raw/polished. Save the
+   attachment using a trusted authenticated client; see [API](api.md). The laptop has no
+   notes or briefs. Do not put keys/tokens into URLs or shared command history.
+5. Keep a reviewed export in the agreed protected location. Tell participants about any
+   incomplete intervals; `[part not transcribed]` is an explicit gap, not invented speech.
+
+## Retention, deletion and privacy
+
+Before sharing, check the receiving app and audience. Exports contain owner text even though
+they exclude connection credentials and device ids. Cache export files older than 24 hours
+are removed on the next export, not on a continuous timer; copies in receiving apps remain.
+Use phone lock and disk encryption on both devices. Do not export participant data without consent.
+
+To remove a session, stop recording, open its session screen and choose **Delete session**.
+Confirm irreversible removal of audio/transcript from phone and laptop. Event notes and saved
+briefs are retained separately and may still contain copied speech. A busy laptop part must
+finish first. If unreachable, choose **Delete on this phone only** only after reading the
+warning: the laptop copy remains until the upload service retries its queued deletion.
+Reconnect to the same laptop/account, open the app and check Diagnostics pending server
+deletes reaches zero. A laptop 404 is treated as already deleted. Follow up separately on
+any Firestore records if the laptop reports cloud deletion failure. Delete notes/brief copies
+and receiving-app exports according to the agreed retention policy; session deletion is not
+secure media erasure or an all-device data purge.
+
+## Final rehearsal checklist (print this page)
+
+Event: __________________ Date/time: ______________ Owner: __________________
+
+- [ ] Consent, retention and event privacy mode agreed; attendees informed.
+- [ ] Phone/laptop/power banks charged; supplies, cable and ventilation ready.
+- [ ] Storage margin measured for event duration; no restrictive battery saver.
+- [ ] Installed APK tested; microphone and recording notification permissions granted.
+- [ ] Models downloaded; local-files-only restart succeeds; correct model ready.
+- [ ] LAN/hotspot connected, no client isolation; Tailscale fallback tested if used.
+- [ ] Shared key entered privately; offline pass covers event plus wrap-up.
+- [ ] Laptop restart without internet preserves pass, ownership cache and queued work.
+- [ ] Vocabulary loaded, event speakers added, saved and checked with real speech.
+- [ ] Kannada, Tamil, Hindi, English and mixed tests read; silence and seams reviewed.
+- [ ] Locked-screen recording verified over several chunks and after unlock.
+- [ ] Wi-Fi drop/reconnect, app kill/recovery, laptop restart and queue-full drills passed.
+- [ ] Notes created offline, timestamped, synced; conflict handling rehearsed.
+- [ ] Finalization complete or known gaps accepted; viewer search/sequence navigation checked.
+- [ ] Cleanup/brief reviewed if enabled; raw transcript unchanged.
+- [ ] Markdown and TXT exports opened in receiving app; PDF visibly unavailable.
+- [ ] Safe diagnostics share inspected; no participant text or credentials.
+- [ ] Disposable-session deletion tested; offline pending retry reaches zero; notes kept.
+- [ ] Protected export destination and retention/deletion follow-up assigned.
+
+Decision: [ ] Ready  [ ] Defer; unresolved issue: ______________________________

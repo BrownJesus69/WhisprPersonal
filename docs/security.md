@@ -236,3 +236,33 @@ are logged, and these are never interpreted as quotas. Job parameters/results co
 content in the existing local SQLite data directory; protect that directory like transcripts.
 No keys are written to jobs, Firestore, client responses or QR codes. Health never contacts
 providers, and unfinished paid jobs never replay automatically after restart.
+
+
+## Export, diagnostics and deletion boundaries
+
+Export uses the existing shared-key and identity/grant guard and checks each session's
+owner and event before producing any document. It reads local stored text and never invokes
+an LLM. Filenames are bounded ASCII and cannot contain paths, quotes or control characters.
+Audit rows record the export action without document content. Export output intentionally
+contains owner-selected transcript/notes/brief text; protect the receiving app and destination.
+Connection keys, tokens, device ids and arbitrary metadata are not serialized into exports.
+As with any user-authored text, review the content before sharing if you typed private data
+into a note or transcript. Export is not a content-redaction service.
+
+Shared diagnostics are a separate whitelist: counts, model/GPU/queue/provider state, limits,
+app version/versionCode, sign-in mode/expiry, sanitized hostname, network and disk. No raw
+unknown JSON/config dumps, transcript text, note text, device identifiers, keys, tokens,
+credential paths or full credential-bearing URLs are shared. Unknown upload error strings
+are reduced to `other_error`. Temporary export files are cached on the phone and files older
+than 24 hours are removed on each subsequent export; receiving apps own their copied files.
+
+Deletion refuses recording/paused/stopping sessions, drains background upload work and
+requires an irreversible confirmation. The laptop still rejects deletion of an in-flight
+chunk with session_busy. A 404 permits local cleanup; auth failures are not treated as an
+offline bypass. Only an explicit phone-only choice after connection failure queues a
+pending_server_deletes record alongside transactional row removal. That record is scoped to
+the owner and is retried by upload service after reconnect, including after app restart.
+Phone-only deletion is not proof that the laptop copy is gone. Event notes, copied transcript
+notes, saved briefs, existing exports and backups require separate retention decisions.
+Deletion is logical/file removal, not secure erase. Check any server cloud-deletion failure
+separately and protect DATA_DIR/device storage throughout recovery.

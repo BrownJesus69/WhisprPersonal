@@ -43,7 +43,7 @@ export default function Search() {
       {results.data?.notes.map(n => <Button key={n.id} secondary label={n.text} onPress={() => router.push({ pathname: '/events/[eventId]/notes', params: { eventId: n.event_id } })} />)}
       {results.data && !results.data.notes.length && <Banner message="No matching notes" />}
       <SectionHeader title="Transcripts" />
-      {results.data?.transcripts.map(r => <Button key={`${r.session_id}:${r.sequence}`} secondary label={r.raw_text} onPress={() => router.push({ pathname: '/session/[sessionId]', params: { sessionId: r.session_id } })} />)}
+      {results.data?.transcripts.map(r => <Button key={`${r.session_id}:${r.sequence}`} secondary label={r.raw_text} onPress={() => router.push({ pathname: '/transcript/[sessionId]', params: { sessionId: r.session_id, sequence: String(r.sequence) } })} />)}
       {results.data && !results.data.transcripts.length && <Banner message="No matching transcripts" />}
     </>}
   </Screen>;

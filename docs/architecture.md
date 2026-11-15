@@ -216,3 +216,32 @@ that local copy; Firestore subscriptions order by client creation time and cap a
 Rules enforce event ownership, exact brief keys, types/limits, fixed owner/creation time and
 server update time. Generated text, reviewed text, provider/model, structured output and
 incomplete provenance stay separate from transcripts and notes.
+
+
+## Export, read-only review and event operations
+
+`POST /api/v1/export` authenticates and verifies every local session owner/event before
+reading stitched chunks. It emits md/txt with gaps, language changes and raw/polished
+fallback labels, then records `transcript_exported`. Export never starts AI work.
+
+The phone composes exports from local SQLite transcript rows and cached event metadata,
+non-deleted notes and an optional explicitly selected saved brief's finalText. Cache files
+live under `Paths.cache/exports`; each export removes files older than 24 hours before
+handing the new file to the native share sheet. PDF remains disabled. The Library/event
+screen links to saved briefs, export and a read-only transcript viewer; transcript search
+links include the matching sequence. Viewer filtering uses existing NFC-aware search and
+never follows live updates automatically. Vocabulary remains on the laptop and applies to
+future chunk transcription only.
+
+Phone session deletion stops/drains upload/AI work, refuses active capture, and calls the
+existing laptop DELETE endpoint. File deletion precedes one SQLite transaction removing
+chunks, transcripts, stream/language events, referencing ai_jobs and recording_sessions.
+Event-level notes and saved briefs remain. Offline phone-only deletion adds a
+pending_server_deletes row (session_id, event_id, owner_uid) in the same transaction.
+The next upload-service passes retry owner-scoped deletes, treating 404 as success and
+retaining other failures. Settings diagnostics show the remaining count.
+
+Diagnostics render/share only explicitly listed laptop fields and phone status/counts.
+Unknown nested fields, full URLs, participant text, credentials and device identifiers
+never enter the diagnostics document. Phone disk/version/network counts work without a
+laptop; laptop status is independently unavailable when disconnected.
