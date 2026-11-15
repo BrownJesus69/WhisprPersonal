@@ -14,6 +14,32 @@ Verified constraints (firebase-admin 7.8.0 on this machine):
   server restart. Rejected for this reason.
 Decision: a server-minted, HMAC-signed grant verified purely locally.
 
+## Integration points in the current code (Phase 3 committed as 9ae15fb)
+- `app/security/auth.py`: `get_current_user(request)` parses the Bearer token and calls
+  `request.app.state.token_verifier.verify(token)`; `require_auth` = server key then
+  `get_current_user`. Route grants here: tokens starting with `wpg1.` go to
+  `app.state.grant_verifier` (when `auth_grant_enabled`), everything else to `token_verifier`.
+  Keep the server-key-first order. `/api/v1/auth/grant` must use a dependency that forces the
+  Firebase path (reject a `wpg1.` Bearer with 401 `invalid_auth_token`, message "A Firebase
+  sign-in is required to issue a grant.").
+- `authenticated_user` (`security/rate_limit.py`) wraps `require_auth` + per-user limit; reuse it.
+- WebSocket `routers/stream.py` calls `require_auth(websocket)` then `enforce_allowlist` →
+  grants work automatically once `get_current_user` routes them; add a stream test.
+- `main.py` lifespan builds `token_verifier`; build `GrantService` there (needs `store` for
+  revocations and `settings.data_dir` for the key file). `create_app(...)` test overrides must
+  keep working.
+- `services/store.py`: append migration 3 `CREATE TABLE revoked_grants (jti TEXT PRIMARY KEY,
+  uid TEXT, exp INTEGER, revoked_at TEXT)`; prune rows with `exp < now` at startup. Use
+  `audit_in`/`audit` for `grant_issued`, `grant_revoked`, `grant_key_rotated` (never the grant).
+- Logging redaction (`core/logging.py` `RedactingFilter`): add a pattern for `wpg1\.[A-Za-z0-9_.-]+`.
+- Health schema `AuthInfo` and `/api/v1/auth/check` response (`routers/auth.py`) get the new
+  fields; update `.env.example` (the config guard test requires every Settings field there),
+  `docs/api.md`, `docs/security.md`, `docs/setup.md`, `docs/event-runbook.md` (pre-event:
+  "get a grant while online; check `grant_expires_at` covers the event").
+- Python 3.12, `hmac`, `hashlib`, `secrets`, `base64` stdlib only — no new dependencies.
+- Run tests with `./.venv/Scripts/python -m pytest -q -p no:cacheprovider`; ruff check +
+  format clean. All 156 existing tests must keep passing.
+
 ## Design
 - **Issue:** `POST /api/v1/auth/grant` — requires the server key AND a **Firebase ID token**
   (a grant can never mint another grant; otherwise offline access would be unbounded).
