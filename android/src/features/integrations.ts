@@ -1,0 +1,1 @@
+export const integrations = ['Translation', 'Calendar', 'Drive', 'Gmail', 'App Check', 'FCM', 'Web search', 'Cloud Whisper'].map(name => ({ name, enabled: false as const, status: 'Not configured' as const }));
