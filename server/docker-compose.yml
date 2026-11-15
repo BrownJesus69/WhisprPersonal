@@ -1,0 +1,25 @@
+services:
+  server:
+    build: .
+    image: eventscribe-server:local
+    env_file: .env
+    environment:
+      MODELS_DIR: /models
+      DATA_DIR: /data
+    ports:
+      - "${EVENTSCRIBE_BIND:-0.0.0.0}:${EVENTSCRIBE_PORT:-8000}:8000"
+    volumes:
+      - ./models:/models
+      - ./data:/data
+      - ../secrets:/run/secrets/eventscribe:ro
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"

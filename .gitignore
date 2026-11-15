@@ -1,0 +1,73 @@
+# ---------------------------------------------------------------
+# EventScribe — secrets and credentials (NEVER commit)
+# ---------------------------------------------------------------
+secrets/
+*.env
+.env
+.env.*
+!.env.example
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceAccount*.json
+# Firebase Android client config: not a server secret, but kept out of git;
+# supplied to EAS builds as a file secret (see android/README.md).
+google-services.json
+GoogleService-Info.plist
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# ---------------------------------------------------------------
+# Server runtime data (audio, models, queues, logs)
+# ---------------------------------------------------------------
+server/models/
+server/data/
+server/logs/
+*.sqlite
+*.sqlite3
+*.db
+*.wav
+*.m4a
+*.webm
+*.ogg
+*.opus
+
+# ---------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# ---------------------------------------------------------------
+# Node / Expo / Android
+# ---------------------------------------------------------------
+node_modules/
+.expo/
+dist/
+web-build/
+android/android/
+android/ios/
+*.apk
+*.aab
+npm-debug.log*
+yarn-error.log*
+
+# ---------------------------------------------------------------
+# OS / editor
+# ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.png.bak
+Screenshot*.png

@@ -1,0 +1,17 @@
+# Normalize to LF in the repo and on checkout, regardless of core.autocrlf.
+* text=auto eol=lf
+
+# Windows-only launchers need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Shell scripts must stay LF (bash breaks on CRLF).
+*.sh text eol=lf
+
+# Binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.wav binary
+*.m4a binary
