@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Platform, ScrollView, Text, ToastAndroid, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { QuickNote } from '@/components/QuickNote';
+import { createNote } from '@/lib/notes/notes';
+import { noteSync } from '@/lib/notes/noteSync';
 import { Button } from '@/components/Button';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Screen } from '@/components/Screen';
@@ -47,6 +50,10 @@ export default function SessionScreen() {
   useEffect(() => { if (session?.owner_uid === uid) return liveController.acquire(sessionId); }, [session?.owner_uid, sessionId, uid]);
   const event = useQuery({ queryKey: ['event', uid, session?.event_id], enabled: !!session && !!uid,
     queryFn: () => getEvent(session!.event_id, uid!) });
+  // Depend on ids only: the session row changes with every saved chunk, and resubscribing
+  // would re-read the event's notes from Firestore each time.
+  const watchEventId = session && session.owner_uid === uid ? session.event_id : undefined;
+  useEffect(() => { if (watchEventId) return noteSync.watch(watchEventId); }, [watchEventId]);
   const own = recording.sessionId === sessionId;
   const otherLive = !own && ['recording','paused','stopping','requesting_permission','error'].includes(recording.phase) && !!recording.sessionId;
   const recovered = session?.finalize_status === 'interrupted';
@@ -86,6 +93,7 @@ export default function SessionScreen() {
           await client.invalidateQueries({ queryKey: ['local-session', uid, sessionId] });
         })}
       />}
+      <QuickNote eventId={session.event_id} sessionId={sessionId} phase={phase} elapsedMs={elapsed} />
       <QueueStatus chunks={query.data?.chunks ?? []} offline={['disconnected','error'].includes(connection)} retry={() => act(async () => { await uploadService.retryFailed(sessionId); })} />
       {!['stopped', 'finalized'].includes(session.status) && <LanguagePicker mode={live.model.language.mode} onSelect={mode => act(async () => {
         await liveController.setOverride(sessionId, mode);
@@ -96,7 +104,10 @@ export default function SessionScreen() {
       {!!live.model.language.timeline.length && <ScrollView horizontal style={{ flexGrow: 0 }} accessibilityLabel="Language timeline">
         <Text selectable style={{ ...typography.label, color: t.muted }}>{live.model.language.timeline.map(s => `${languageName(s.language)} (${s.fromSequence + 1}–${s.toSequence + 1})`).join(' → ')}</Text>
       </ScrollView>}
-      <TranscriptList model={live.model} chunkStarts={Object.fromEntries((query.data?.chunks ?? []).map(c => [c.sequence, c.start_ms]))} />
+      <TranscriptList onAddNote={row => act(async () => {
+        await createNote(session.event_id, { text: row.text, source: 'transcript', timestampMs: row.startMs, sessionId, sequence: row.sequence, language: row.language ?? null });
+        if (Platform.OS === 'android') ToastAndroid.show('Added to notes', ToastAndroid.SHORT);
+      })} model={live.model} chunkStarts={Object.fromEntries((query.data?.chunks ?? []).map(c => [c.sequence, c.start_ms]))} />
       <ConsentDialog visible={consent} cancel={() => setConsent(false)} confirm={() => {
         setConsent(false); act(() => recording.start(session, event.data?.title ?? 'Event recording', true));
       }} />

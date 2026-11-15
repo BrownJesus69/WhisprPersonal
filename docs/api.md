@@ -243,3 +243,35 @@ languages is {supported: configured codes, default_mode: auto}. Overall status i
 when model ready and queue running. Diagnostics adds chunk_counts by status,
 average_real_time_factor over the latest 50 done chunks (null when absent), and
 cuda_dll_dirs_added (count only). No audio paths, transcripts, credentials or DLL paths appear.
+## Firestore notes (Phase 7)
+
+Path: `events/{eventId}/notes/{noteId}`. Phone-generated ids are `note_` plus 32 UUID hex
+characters. This is a Firestore contract; there are no new laptop HTTP endpoints.
+
+Exactly these keys are required:
+
+| Key | Type and constraint |
+| --- | --- |
+| ownerId | string, authenticated event owner uid |
+| source | `manual`, `transcript`, or reserved `ai` |
+| text | string ≤5000 characters; empty iff deleted |
+| timestampMs | nonnegative integer recording offset or null |
+| speaker | string ≤100 characters or null; null on deletion |
+| sessionId | string ≤128 characters or null |
+| sequence | nonnegative integer transcript sequence or null |
+| language | string ≤8 characters or null |
+| deleted | boolean tombstone |
+| revision | integer ≥1 |
+| baseRevision | integer ≥0 and less than revision |
+| deviceId | per-install random string, 8–64 characters |
+| createdAt | fixed client timestamp, reused on every retry |
+| updatedAt | server timestamp equal to request time |
+
+Creates require an absent document and valid schema. Updates preserve ownerId, createdAt and
+source, and require one of: increasing revision with baseRevision equal to the current server
+revision; increasing revision from the same device; or equal revision/device with changes
+limited to updatedAt/baseRevision. Hard delete remains owner-only; the app uses tombstones.
+The adapter writes complete documents with `setDoc` (no merge). Server acknowledgement is
+asynchronous and never blocks note editing. Subscriptions order by createdAt, limit 500,
+include metadata changes and report pending-write metadata; the engine ignores local echoes.
+No composite notes index is required. Malformed cloud documents are ignored with a safe code.

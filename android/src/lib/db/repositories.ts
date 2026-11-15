@@ -1,3 +1,4 @@
+import { normalizeSearch, escapeLike, type Note, type SyncState } from '../notes/model';
 import type { SQLiteDatabase, SQLiteBindValue } from 'expo-sqlite';
 import type { LanguageMode } from '@/types/models';
 import { database } from './database';
@@ -50,7 +51,20 @@ export interface TranscriptRepo {
   resetLastEventSeq(sessionId: string): Promise<void>;
   setLanguageOverride(sessionId: string, mode: LanguageMode, fromSequence: number): Promise<void>;
 }
-export type Repositories = SessionRepo & ChunkRepo & TranscriptRepo;
+export type NotePatch = Partial<Note> | ((current: Note) => Partial<Note>);
+export interface TranscriptSearchResult extends TranscriptRow { event_id: string }
+export interface NoteRepo {
+  noteEventIds(owner: string): Promise<string[]>;
+  noteStates(owner: string, eventId: string): Promise<SyncState[]>;
+  putNote(note: Note): Promise<void>;
+  note(id: string): Promise<Note | null>;
+  notes(owner: string, eventId: string, search?: string): Promise<Note[]>;
+  pendingNotes(owner: string, now: number): Promise<Note[]>;
+  updateNote(id: string, patch: NotePatch): Promise<void>;
+  searchNotes(owner: string, q: string, limit: number): Promise<Note[]>;
+  searchTranscripts(owner: string, q: string, limit: number): Promise<TranscriptSearchResult[]>;
+}
+export type Repositories = SessionRepo & ChunkRepo & TranscriptRepo & NoteRepo;
 export function transcriptRow(sessionId: string, data: FinalData, ts = new Date().toISOString()): TranscriptRow {
   return { ...data, session_id: sessionId, revision: 0, updated_at: ts, failed_code: null };
 }
@@ -88,6 +102,43 @@ async function update(db: SQLiteDatabase, table: string, key: string, id: string
 }
 export class SQLiteRepositories implements Repositories {
   constructor(private db: SQLiteDatabase) {}
+  async noteEventIds(owner: string) {
+    return (await this.db.getAllAsync<{ event_id: string }>('SELECT DISTINCT event_id FROM notes WHERE owner_uid=? ORDER BY event_id', owner)).map(n => n.event_id);
+  }
+  async noteStates(owner: string, eventId: string) {
+    return (await this.db.getAllAsync<{ sync_state: SyncState }>('SELECT sync_state FROM notes WHERE owner_uid=? AND event_id=?', owner,eventId)).map(n => n.sync_state);
+  }
+  async putNote(note: Note) {
+    await this.db.withExclusiveTransactionAsync(async tx => { await tx.runAsync(insertSql('notes', note), values(note)); });
+  }
+  note(id: string) { return this.db.getFirstAsync<Note>('SELECT * FROM notes WHERE id=?', id); }
+  notes(owner: string, eventId: string, search = '') {
+    return this.db.getAllAsync<Note>("SELECT * FROM notes WHERE owner_uid=? AND event_id=? AND (deleted=0 OR sync_state IN ('conflict','failed')) AND search_text LIKE ? ESCAPE '\\' ORDER BY timestamp_ms,created_at,id", owner, eventId, `%${escapeLike(normalizeSearch(search))}%`);
+  }
+  pendingNotes(owner: string, now: number) {
+    return this.db.getAllAsync<Note>("SELECT * FROM notes WHERE owner_uid=? AND sync_state='pending' AND next_attempt_at<=? ORDER BY updated_at,id LIMIT 50", owner, now);
+  }
+  async updateNote(id: string, patch: NotePatch) {
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      const current = await tx.getFirstAsync<Note>('SELECT * FROM notes WHERE id=?', id);
+      if (!current) return;
+      const row = typeof patch === 'function' ? patch(current) : patch;
+      if (!Object.keys(row).length) return;
+      await tx.runAsync(`UPDATE notes SET ${Object.keys(row).map(k => `${k}=?`).join(',')} WHERE id=?`, [...values(row), id]);
+    });
+  }
+  searchNotes(owner: string, q: string, cap: number) {
+    return this.db.getAllAsync<Note>("SELECT * FROM notes WHERE owner_uid=? AND deleted=0 AND search_text LIKE ? ESCAPE '\\' ORDER BY updated_at DESC,id DESC LIMIT ?", owner, `%${escapeLike(normalizeSearch(q))}%`, cap);
+  }
+  async searchTranscripts(owner: string, q: string, cap: number): Promise<TranscriptSearchResult[]> {
+    // Normalize in JS: SQLite lower() cannot fold Unicode, and v2 rows have no search column.
+    // segments_json (word timings) is the bulk of each row and search never shows it: skip it.
+    const rows = await this.db.getAllAsync<Omit<TranscriptSqlRow, 'segments_json'> & { event_id: string }>(`SELECT t.session_id,t.sequence,t.chunk_id,t.start_ms,t.end_ms,t.raw_text,t.detected_language,
+      t.language_confidence,t.language_source,t.language_uncertain,t.no_speech,t.failed_code,t.revision,t.updated_at,s.event_id
+      FROM transcript_chunks t JOIN recording_sessions s ON t.session_id=s.id WHERE s.owner_uid=? AND t.no_speech=0 ORDER BY t.updated_at DESC,t.session_id DESC,t.sequence DESC`, owner);
+    const needle = normalizeSearch(q);
+    return rows.filter(r => normalizeSearch(r.raw_text).includes(needle)).slice(0,cap).map(r => ({ ...r, segments: [], language_uncertain: !!r.language_uncertain, no_speech: !!r.no_speech }));
+  }
   async upsertTranscript(row: TranscriptRow, observedSeq?: number) {
     await this.db.withExclusiveTransactionAsync(async tx => {
       if (observedSeq !== undefined) {

@@ -1,8 +1,23 @@
-import { languageEventRow, transcriptRow, type Repositories, type LocalSession, type LocalChunk, type TranscriptRow, type LanguageEventRow } from './repositories';
+import { normalizeSearch, type Note } from '../notes/model';
+import { languageEventRow, transcriptRow, type NotePatch, type Repositories, type LocalSession, type LocalChunk, type TranscriptRow, type LanguageEventRow } from './repositories';
 import type { LanguageMode, PersistedEvent } from '../live/events';
 
 /** Mirrors uniqueness and atomic progress updates for offline tests. */
 export class MemoryRepositories implements Repositories {
+  private noteRows = new Map<string, Note>();
+  async noteEventIds(owner: string) { return [...new Set([...this.noteRows.values()].filter(n => n.owner_uid === owner).map(n => n.event_id))].sort(); }
+  async noteStates(owner: string, eventId: string) { return [...this.noteRows.values()].filter(n => n.owner_uid === owner && n.event_id === eventId).map(n => n.sync_state); }
+  async putNote(note: Note) { if (this.noteRows.has(note.id)) throw new Error('Duplicate note'); this.noteRows.set(note.id, structuredClone(note)); }
+  async note(id: string) { return structuredClone(this.noteRows.get(id) ?? null); }
+  async notes(owner: string, eventId: string, search = '') {
+    return structuredClone([...this.noteRows.values()].filter(n => n.owner_uid === owner && n.event_id === eventId && (!n.deleted || ['conflict','failed'].includes(n.sync_state)) && n.search_text.includes(normalizeSearch(search))).sort((a,b) => (a.timestamp_ms === null && b.timestamp_ms === null ? 0 : a.timestamp_ms === null ? -1 : b.timestamp_ms === null ? 1 : a.timestamp_ms-b.timestamp_ms) || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)));
+  }
+  async pendingNotes(owner: string, now: number) { return structuredClone([...this.noteRows.values()].filter(n => n.owner_uid === owner && n.sync_state === 'pending' && n.next_attempt_at <= now).sort((a,b) => a.updated_at.localeCompare(b.updated_at) || a.id.localeCompare(b.id)).slice(0,50)); }
+  async updateNote(id: string, patch: NotePatch) { const n = this.noteRows.get(id); if (n) this.noteRows.set(id, structuredClone({ ...n, ...(typeof patch === 'function' ? patch(structuredClone(n)) : patch) })); }
+  async searchNotes(owner: string, q: string, cap: number) { return structuredClone([...this.noteRows.values()].filter(n => n.owner_uid === owner && !n.deleted && n.search_text.includes(normalizeSearch(q))).sort((a,b) => b.updated_at.localeCompare(a.updated_at) || b.id.localeCompare(a.id)).slice(0,cap)); }
+  async searchTranscripts(owner: string, q: string, cap: number) {
+    return structuredClone([...this.transcripts.values()].filter(r => this.sessionRows.get(r.session_id)?.owner_uid === owner && !r.no_speech && normalizeSearch(r.raw_text).includes(normalizeSearch(q))).sort((a,b) => b.updated_at.localeCompare(a.updated_at) || b.session_id.localeCompare(a.session_id) || b.sequence-a.sequence).slice(0,cap).map(r => ({ ...r, segments: [], event_id: this.sessionRows.get(r.session_id)!.event_id })));
+  }
   private sessionRows = new Map<string, LocalSession>();
   private chunkRows = new Map<string, LocalChunk>();
   private transcripts = new Map<string, TranscriptRow>();

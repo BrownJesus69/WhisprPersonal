@@ -82,3 +82,34 @@ substitutes for encrypted backups and device access controls.
 3. Set `WHISPER_LOCAL_FILES_ONLY=true` once the model is downloaded.
 4. Offline, the first new session may take ~10 s to start (Firestore timeout); later ones are
    immediate. Recording on the phone does not wait for this.
+## Taking and finding notes (Phase 7)
+
+Open an event and tap **Notes (n)**. Add a note, choose a speaker (or None), and save. Notes
+appear after the phone saves them; airplane mode is supported. During an active recording,
+use **Quick note → Add note** to attach the session and elapsed time. Paused recording keeps
+its current time; notes taken after stopping have no recording offset. The event note editor
+also stamps an active session for the same event. Long-press a finalized transcript row, or
+use its accessibility **Add to notes** action, to copy its raw text and source time.
+
+Use **Edit note** to change text/speaker. **Delete note** asks for confirmation and syncs a
+deletion marker to other devices. AI-assisted notes are not configured in this phase.
+
+The sync chips mean:
+
+- **Saved on phone · syncing**: safely stored locally, waiting for cloud acknowledgement.
+- **Synced**: the current local version has been acknowledged or pulled from the cloud.
+- **Conflict**: another device changed this note; both copies are retained for your decision.
+- **Not saved to cloud**: a permanent rejection needs attention; the phone copy is retained.
+  Check the account/event and rules, then use **Retry cloud sync**.
+
+For **Changed on another device**, read both texts. **Keep mine** publishes the phone copy
+based on the cloud's latest revision; **Use cloud** explicitly takes the cloud copy (including
+its deletion). Conflicts never resolve themselves. A deletion conflict stays visible until
+you decide. The header counts pending deletions as well as visible notes. Leave the app open
+or reopen it after connectivity returns to trigger retry; the laptop need not be connected.
+
+The Library's **Search notes and transcripts** searches this account's saved phone data.
+Enter two or more characters and pause briefly. Each section shows up to 50 newest matches;
+note results open event notes, and transcript results open their recording session. Event
+notes also have their own search box. Kannada, Tamil and Hindi combining marks are retained;
+percent, underscore and backslash are searched as literal characters.

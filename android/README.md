@@ -294,3 +294,21 @@ Expo Doctor requires its CLI to already be installed or cached. Offline runs
 cannot complete Doctor's remote service checks. Device QA remains necessary for
 native Firebase configuration, USB installation, real QR permission/scanning,
 Wi-Fi/Tailscale reachability, accessibility/font scaling, and offline renewal.
+## Phase 7: offline notes and search
+
+Event details now link to Notes with a count. Notes support local creation, speaker labels,
+editing, confirmed deletion and explicit Keep mine / Use cloud conflict resolution. A SQLite
+v3 outbox survives restarts; Firestore acknowledgements never block the UI. Sync starts with
+the signed-in uid independently of the laptop URL. Session quick notes stamp recording time,
+and finalized transcript rows offer long-press/accessibility **Add to notes** actions.
+AI-assisted notes show **not configured**.
+
+Library search covers owner-scoped local notes and transcripts (two characters minimum,
+250ms debounce, 50 results per section). Notes normalize Unicode in JS and use escaped LIKE;
+existing transcripts normalize in JS after an owner-filtered join. No FTS5 or new dependencies.
+
+Run `npx tsc --noEmit`, `npx eslint .`, and `npx jest --runInBand` here. The five Phase 7 suites
+cover pure decisions, real SQLite/memory semantics, fake offline sync, Firestore serialization
+and accessible note controls. Run emulator rule tests using [the rules test instructions](../firebase/rules-tests/README.md).
+Deploy the reviewed Firestore rules with the release. Native-device airplane-mode, restart,
+font-scaling and screen-reader checks still belong in device QA.

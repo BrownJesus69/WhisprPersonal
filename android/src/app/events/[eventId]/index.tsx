@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { createLocalSession } from '@/lib/session/recordingStore';
+import { listNotes } from '@/lib/notes/notes';
+import { onNotesChanged } from '@/lib/notes/noteSync';
 import { repositories } from '@/lib/db/repositories';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEvent } from '@/lib/firebase/events';
 import { useAuthStore } from '@/state/authStore';
 import { Screen } from '@/components/Screen';
@@ -17,6 +19,9 @@ export default function EventDetail() {
     eventId: string;
   }>();
   const uid = useAuthStore(s => s.user?.uid);
+  const client = useQueryClient();
+  const count = useQuery({ queryKey: ['notes',uid,eventId], enabled: !!uid, queryFn: () => listNotes(uid!,eventId) });
+  useEffect(() => onNotesChanged(() => { void client.invalidateQueries({ queryKey: ['notes',uid,eventId] }); }), [client,uid,eventId]);
   const [startError, setStartError] = useState('');
   const [starting, setStarting] = useState(false);
   const sessions = useQuery({ queryKey: ['local-sessions', uid, eventId], enabled: !!uid, refetchInterval: 3000,
@@ -27,6 +32,7 @@ export default function EventDetail() {
     {error && <Banner error message="Could not load this event." />}
     {!isPending && !error && !event && <Banner message="Event not found" />}
     {event && <>
+      <Button label={`Notes (${count.data?.filter(n => !n.deleted).length ?? 0})`} onPress={() => router.push({ pathname: '/events/[eventId]/notes', params: { eventId } })} />
       <StatusBadge status={event.status} />
       <Card>
         <KeyValueRow label="Description" value={event.description || '—'} />

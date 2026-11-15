@@ -59,5 +59,23 @@ async function open() {
       PRAGMA user_version = 2;
     `);
   });
+  if ((version?.user_version ?? 0) < 3) await db.withExclusiveTransactionAsync(async tx => {
+    await tx.execAsync(`
+      CREATE TABLE notes (
+        id TEXT PRIMARY KEY, event_id TEXT NOT NULL, owner_uid TEXT NOT NULL,
+        session_id TEXT, sequence INTEGER,
+        source TEXT NOT NULL CHECK(source IN ('manual','transcript','ai')),
+        text TEXT NOT NULL, search_text TEXT NOT NULL, timestamp_ms INTEGER, speaker TEXT, language TEXT,
+        deleted INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL,
+        synced_revision INTEGER NOT NULL DEFAULT 0, remote_device TEXT,
+        sync_state TEXT NOT NULL CHECK(sync_state IN ('pending','synced','conflict','failed')),
+        remote_json TEXT, last_error TEXT, attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE INDEX notes_event ON notes(owner_uid,event_id,deleted,timestamp_ms);
+      CREATE INDEX notes_sync ON notes(owner_uid,sync_state,next_attempt_at);
+      PRAGMA user_version = 3;
+    `);
+  });
   return db;
 }

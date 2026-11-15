@@ -5,7 +5,7 @@ import { spacing, typography, useTheme } from '@/theme';
 import { TranscriptRow, type DisplayRow } from './TranscriptRow';
 import { Button } from './Button';
 
-export function TranscriptList({ model, chunkStarts }: { model: TranscriptState; chunkStarts: Record<number, number> }) {
+export function TranscriptList({ model, chunkStarts, onAddNote }: { model: TranscriptState; chunkStarts: Record<number, number>; onAddNote?: (row: DisplayRow) => void }) {
   const t = useTheme();
   const list = useRef<FlatList<DisplayRow>>(null);
   const following = useRef(true);
@@ -16,7 +16,7 @@ export function TranscriptList({ model, chunkStarts }: { model: TranscriptState;
     for (const row of model.finals.values()) {
       if (row.no_speech) continue;
       rows.set(row.sequence, { sequence: row.sequence, startMs: row.start_ms, text: row.raw_text,
-        revision: row.revision, divider: row.detected_language && row.detected_language !== previousLanguage ? row.detected_language : undefined });
+        revision: row.revision, language: row.detected_language, divider: row.detected_language && row.detected_language !== previousLanguage ? row.detected_language : undefined });
       if (row.detected_language) previousLanguage = row.detected_language;
     }
     for (const [sequence, segments] of model.partials) if (!rows.has(sequence) && !model.finals.has(sequence)) rows.set(sequence, {
@@ -26,7 +26,7 @@ export function TranscriptList({ model, chunkStarts }: { model: TranscriptState;
     return [...rows.values()].sort((a,b) => a.sequence - b.sequence);
   }, [model.finals, model.partials, model.failed, chunkStarts]);
   const silent = [...model.finals.values()].filter(r => r.no_speech).length;
-  const render = useCallback(({ item }: { item: DisplayRow }) => <TranscriptRow row={item} />, []);
+  const render = useCallback(({ item }: { item: DisplayRow }) => <TranscriptRow row={item} onAddNote={onAddNote} />, [onAddNote]);
   return <View style={{ flex: 1 }}>
     <FlatList ref={list} data={data} keyExtractor={row => String(row.sequence)} renderItem={render}
       accessibilityLabel="Raw transcript" contentContainerStyle={{ paddingHorizontal: spacing.sm, flexGrow: 1 }}

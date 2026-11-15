@@ -28,6 +28,35 @@ service cloud.firestore {
         && (!('polishedText' in request.resource.data) ||
           (request.resource.data.polishedText is string && request.resource.data.polishedText.size() <= 20000));
     }
+    function validNote() {
+      let n = request.resource.data;
+      let keys = ['ownerId','source','text','timestampMs','speaker','sessionId','sequence','language',
+        'deleted','revision','baseRevision','deviceId','createdAt','updatedAt'];
+      return n.keys().hasAll(keys) && n.keys().hasOnly(keys)
+        && n.ownerId is string && n.ownerId == request.auth.uid
+        && n.source in ['manual','transcript','ai']
+        && n.text is string && n.text.size() <= 5000
+        && n.deleted is bool
+        && ((n.deleted && n.text == '' && n.speaker == null) || (!n.deleted && n.text.size() > 0))
+        && (n.timestampMs == null || (n.timestampMs is int && n.timestampMs >= 0))
+        && (n.speaker == null || (n.speaker is string && n.speaker.size() <= 100))
+        && (n.sessionId == null || (n.sessionId is string && n.sessionId.size() <= 128))
+        && (n.sequence == null || (n.sequence is int && n.sequence >= 0))
+        && (n.language == null || (n.language is string && n.language.size() <= 8))
+        && n.revision is int && n.revision >= 1
+        && n.baseRevision is int && n.baseRevision >= 0 && n.baseRevision < n.revision
+        && n.deviceId is string && n.deviceId.size() >= 8 && n.deviceId.size() <= 64
+        && n.createdAt is timestamp && n.updatedAt is timestamp && n.updatedAt == request.time;
+    }
+    function noteUpdate() {
+      let n = request.resource.data;
+      let r = resource.data;
+      return validNote() && n.ownerId == r.ownerId && n.createdAt == r.createdAt && n.source == r.source
+        && ((n.revision > r.revision && n.baseRevision == r.revision)
+          || (n.revision > r.revision && n.deviceId == r.deviceId)
+          || (n.revision == r.revision && n.deviceId == r.deviceId
+            && n.diff(r).affectedKeys().hasOnly(['updatedAt','baseRevision'])));
+    }
     match /users/{uid} {
       allow read, delete: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid && safeFields();
@@ -48,8 +77,8 @@ service cloud.firestore {
       }
       match /notes/{noteId} {
         allow read, delete: if isEventOwner(eventId);
-        allow create: if isEventOwner(eventId) && ownedCreate();
-        allow update: if isEventOwner(eventId) && ownedUpdate();
+        allow create: if isEventOwner(eventId) && validNote();
+        allow update: if isEventOwner(eventId) && noteUpdate();
       }
       match /briefs/{briefId} {
         allow read, delete: if isEventOwner(eventId);

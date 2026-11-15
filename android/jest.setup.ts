@@ -19,6 +19,7 @@ jest.mock('@react-native-firebase/firestore', () => ({
     path === undefined ? { path: `${parent.path}/event-1`, id: 'event-1' } : { path, id }),
   addDoc: jest.fn(async () => ({ id: 'event-1' })),
   getDoc: jest.fn(),
+  getDocFromServer: jest.fn(async () => ({ exists: () => false, data: () => undefined, metadata: { hasPendingWrites: false, fromCache: false } })),
   setDoc: jest.fn(async () => undefined),
   updateDoc: jest.fn(async () => undefined),
   query: jest.fn((...args: unknown[]) => args),

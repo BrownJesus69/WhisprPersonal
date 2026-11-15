@@ -4,6 +4,7 @@ import { recorderAdapter } from '@/lib/audio/recorder';
 import { attachRecorder, useRecordingStore } from '@/lib/session/recordingStore';
 import { repositories } from '@/lib/db/repositories';
 import { recoverSessions } from '@/lib/session/recovery';
+import { noteSync } from '@/lib/notes/noteSync';
 import { uploadService } from '@/lib/upload/uploadService';
 import { liveController } from '@/lib/live/liveController';
 import { useSettingsStore } from '@/state/settingsStore';
@@ -27,6 +28,12 @@ function RecordingRuntime() {
   const url = useSettingsStore(s => s.serverUrl);
   const [recoveredOwner, setRecoveredOwner] = useState<AppUser | null>(null);
   const [recoveryError, setRecoveryError] = useState(false);
+  const [noteSyncError, setNoteSyncError] = useState(false);
+  useEffect(() => {
+    let disposed = false;
+    if (uid) void noteSync.start(uid).then(() => { if (!disposed) setNoteSyncError(false); }).catch(() => { if (!disposed) setNoteSyncError(true); });
+    return () => { disposed = true; noteSync.stop(); };
+  }, [uid]);
   useEffect(() => { attachRecorder(recorderAdapter(() => ref.current)); }, []);
   useEffect(() => {
     if (!uid) return;
@@ -55,7 +62,10 @@ function RecordingRuntime() {
       }).catch(() => { setRecoveryError(true); });
     }
   }, [uid]);
-  return recoveryError ? <Banner error message="Local audio recovery needs attention. Reopen the app to retry. Saved files are retained." /> : null;
+  return <>
+    {recoveryError && <Banner error message="Local audio recovery needs attention. Reopen the app to retry. Saved files are retained." />}
+    {noteSyncError && <Banner error message="Notes sync could not start. Notes stay on this phone. Reopen the app to retry." />}
+  </>;
 }
 
 export default function RootLayout() {
@@ -78,7 +88,9 @@ export default function RootLayout() {
               <Stack.Screen name="connect" options={{ title: 'Connect laptop' }} />
               <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan laptop QR' }} />
               <Stack.Screen name="events/new" options={{ title: 'New event' }} />
-              <Stack.Screen name="events/[eventId]" options={{ title: 'Event' }} />
+              <Stack.Screen name="events/[eventId]/index" options={{ title: 'Event' }} />
+              <Stack.Screen name="events/[eventId]/notes" options={{ title: 'Notes' }} />
+              <Stack.Screen name="search" options={{ title: 'Search' }} />
               <Stack.Screen name="session/[sessionId]" options={{ title: 'Recording session' }} />
             </Stack.Protected>
           </Stack>

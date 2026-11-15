@@ -99,7 +99,54 @@ or failed chunks produce a partial transcript. Late uploads are accepted while f
 Firestore receives session metadata and finalized chunk text only, in batches of at most 450.
 Cloud errors mark sync failed and retry independently without invalidating transcription.
 Audio retention is keep by default; delete_on_finalize removes audio while retaining results.
+
 Deleting a non-busy session removes local rows/audio and attempts deletion of nested cloud
 chunks and the session doc. A cloud deletion failure is reported for operator follow-up.
 A shutdown timeout cancels coroutine bookkeeping and leaves an in-flight processing row for
 startup recovery; the executor is shut down without waiting for native inference to return.
+
+## Phone notes and search (Phase 7)
+
+The phone's SQLite database is the source of truth for notes. Migration 3 adds `notes`, with
+an outbox embedded in each row: intended `revision`, latest acknowledged `synced_revision`,
+`remote_device`, retry metadata and optional conflict `remote_json`. Every user mutation
+uses an exclusive transaction and increments `max(revision, synced_revision) + 1`. Creating a
+note starts at 1/0. Deleting retains a tombstone with empty text and a null speaker.
+
+`NoteSyncEngine` has injected repositories, Firestore adapter, device id and clock. Its
+serialized drain launches at most 50 due writes, oldest edit first, without awaiting server
+acknowledgements. A promise that stays pending offline cannot block another note. In-flight
+keys include revision, so another edit can queue while an earlier revision is unacknowledged.
+Startup, local actions, network recovery, foregrounding and a 30-second pending timer trigger
+the drain. Restart reconstructs work entirely from SQLite. Notes sync needs Firebase, not
+the laptop URL. Account changes stop subscriptions and guard asynchronous callbacks by uid.
+
+The state transitions are:
+
+- Local action: synced/failed → pending; a conflict edit stays conflict and keeps both copies.
+- Server acknowledgement: advance synced revision; mark synced only if no newer local edit
+  or conflict exists. Late results never copy text back into the note.
+- Transient rejection/fetch failure: pending with persisted exponential jitter backoff.
+- Invalid argument/precondition or rejected absent document: failed, retaining local text.
+- A newer other-device document while pending: conflict, retaining local text and remote JSON.
+- Keep mine: advance beyond both revisions, base the write on the cloud revision, then pending.
+- Use cloud: explicitly copy cloud fields and version, then synced (including deletions).
+
+Reference-counted event subscriptions run while notes, session or search screens are open.
+The Firestore query orders by `createdAt`, limits to 500 and includes metadata changes.
+Pending local echoes are ignored by the engine. Older server versions cannot resurrect
+tombstones. New tombstones are imported even when there is no visible local note.
+The adapter rejects malformed documents and logs only `invalid_remote_note`.
+
+Notes store NFC/lowercase `search_text` in JS, retaining Indic combining marks. Queries use
+bound LIKE patterns with literal percent, underscore and backslash escaping; no FTS5 is used.
+Transcript search joins sessions for owner isolation, then normalizes text in JS because
+existing transcript rows have no normalized search column. Both result sets are newest first,
+limited to 50 each, after a 250ms debounce and a minimum two-character query. This scans the
+owner's local transcript rows; it does not perform cloud transcript search. Search watches
+events from local sessions/notes and the existing event subscription (50 recent events).
+
+Quick notes stamp current elapsed recording milliseconds only while recording or paused.
+Final transcript rows can be copied into notes by long press or an accessibility action;
+partial and failed rows never expose that action. Raw transcript storage is unchanged.
+AI-assisted notes remain disabled with a not-configured label.

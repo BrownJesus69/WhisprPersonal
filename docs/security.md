@@ -185,3 +185,24 @@ when the venue has no internet:
 - Vocabulary is local-only data and may be saved offline for unverified events.
 - Firestore ownership lookups are bounded by `FIRESTORE_TIMEOUT_S` (10 s) and fail fast for 30 s
   after a failure. Measured offline: first session start 10.0 s, subsequent 0.0 s.
+
+## Phone note protection (Phase 7)
+
+Only the authenticated event owner can access `events/{eventId}/notes/{noteId}`. Note writes
+must match the exact 14-field contract in `docs/api.md`; extra fields, including secret-like
+keys, are rejected. Text is at most 5000 characters and is empty exactly for tombstones;
+tombstones also clear the speaker. Revision/baseRevision, recording offset and sequence are
+integers. `createdAt`, owner and source cannot change; `updatedAt` must equal request time.
+
+Updates use compare-and-set against the server revision. The same installation may advance
+its own queued writes; same-version retries may only change `updatedAt` and `baseRevision`.
+A stale write from a different device is denied and surfaced as a conflict, preserving the
+local copy. The app never hard-deletes note documents. Existing event/session/chunk/brief/user
+rules retain their previous behavior. Deploy the reviewed rules with the app release.
+
+`deviceId` is a random UUID stored in the phone's ordinary SQLite key/value store. It is not
+a secret or authentication credential; event ownership is always enforced separately by
+Firebase Auth and rules. SQLite reads/search/pushes are scoped to the signed-in uid, and
+asynchronous sync results stop applying when the account changes. No note or credential
+contents are included in invalid-document logs. The rules tests use a demo project and the
+local emulator only; Android tests mock every external service.
