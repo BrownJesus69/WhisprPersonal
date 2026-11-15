@@ -81,6 +81,34 @@ CREATE TABLE ai_usage (
  latency_ms INTEGER, prompt_tokens INTEGER, completion_tokens INTEGER
 );
 """,
+    # 6: dedicated translations never replace speech or dedicated engine output.
+    """
+CREATE TABLE translations (
+ session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+ sequence INTEGER NOT NULL, target_lang TEXT NOT NULL, source_lang TEXT NOT NULL,
+ text TEXT, engine TEXT, model TEXT, created_at TEXT NOT NULL,
+ polished_text TEXT, polish_provider TEXT, polish_model TEXT, polished_at TEXT, error_code TEXT,
+ PRIMARY KEY(session_id, sequence, target_lang)
+);
+CREATE TABLE translation_jobs (
+ id TEXT PRIMARY KEY, owner_uid TEXT NOT NULL, kind TEXT NOT NULL,
+ event_id TEXT NOT NULL, session_ids TEXT NOT NULL, params_json TEXT NOT NULL,
+ status TEXT NOT NULL CHECK(status IN ('queued','running','done','failed','interrupted')),
+ provider TEXT, model TEXT, result_json TEXT, error_code TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX translation_jobs_owner ON translation_jobs(owner_uid, created_at);
+CREATE TABLE translation_job_sessions (
+ job_id TEXT REFERENCES translation_jobs(id) ON DELETE CASCADE,
+ session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
+ PRIMARY KEY(job_id, session_id)
+);
+CREATE TRIGGER translation_session_deleted BEFORE DELETE ON sessions BEGIN
+ DELETE FROM translation_jobs WHERE id IN (
+  SELECT job_id FROM translation_job_sessions WHERE session_id=OLD.id
+ );
+END;
+""",
 ]
 
 
@@ -192,6 +220,11 @@ class Store:
                         + f"\nPRAGMA user_version={index + 1};\nCOMMIT;"
                     )
                 with self.connection:
+                    self.connection.execute(
+                        "UPDATE translation_jobs SET status='interrupted', updated_at=? "
+                        "WHERE status IN ('queued','running')",
+                        (utc_now(),),
+                    )
                     self.connection.execute(
                         "UPDATE ai_jobs SET status='interrupted', updated_at=? "
                         "WHERE status IN ('queued','running')",

@@ -1,7 +1,7 @@
 """Status contracts; health does not contact remote services."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -80,6 +80,7 @@ class FeaturesInfo(BaseModel):
 
 
 class HealthResponse(BaseModel):
+    translation: dict[str, Any] = Field(default_factory=dict)
     status: Literal["ok", "degraded"]
     version: str
     server_time: datetime

@@ -1,0 +1,95 @@
+{
+  "created_at": "2026-11-15T19:58:43.115203+00:00",
+  "engines": {
+    "indictrans2": {
+      "kn-ta": {
+        "chrf": 77.21654482230332,
+        "latency_ms": 169.25599999376573,
+        "n": 12
+      },
+      "kn-hi": {
+        "chrf": 69.54765123958695,
+        "latency_ms": 161.03384998859838,
+        "n": 12
+      },
+      "kn-en": {
+        "chrf": 71.31615205907592,
+        "latency_ms": 157.84800000255927,
+        "n": 12
+      },
+      "ta-kn": {
+        "chrf": 70.8091700318155,
+        "latency_ms": 184.57635000231676,
+        "n": 12
+      },
+      "ta-hi": {
+        "chrf": 74.81062988570206,
+        "latency_ms": 160.78479998395778,
+        "n": 12
+      },
+      "ta-en": {
+        "chrf": 77.78849675935663,
+        "latency_ms": 155.66999997827224,
+        "n": 12
+      },
+      "hi-kn": {
+        "chrf": 74.81483312535852,
+        "latency_ms": 182.02690000180155,
+        "n": 12
+      },
+      "hi-ta": {
+        "chrf": 77.06412954155725,
+        "latency_ms": 173.38289998588152,
+        "n": 12
+      },
+      "hi-en": {
+        "chrf": 76.71221602381473,
+        "latency_ms": 152.851599996211,
+        "n": 12
+      },
+      "en-kn": {
+        "chrf": 77.0550527109526,
+        "latency_ms": 166.20024997973815,
+        "n": 12
+      },
+      "en-ta": {
+        "chrf": 80.32706133331217,
+        "latency_ms": 170.5462000099942,
+        "n": 12
+      },
+      "en-hi": {
+        "chrf": 87.1163965234795,
+        "latency_ms": 149.87490000203252,
+        "n": 12
+      }
+    },
+    "libretranslate": {
+      "hi-en": {
+        "chrf": 72.61037097160234,
+        "latency_ms": 30.50384999369271,
+        "n": 12,
+        "eligible": true
+      },
+      "en-hi": {
+        "chrf": 70.520335182936,
+        "latency_ms": 31.36195000843145,
+        "n": 12,
+        "eligible": false
+      }
+    }
+  },
+  "recommendation": {
+    "en-hi": "indictrans2",
+    "en-kn": "indictrans2",
+    "en-ta": "indictrans2",
+    "hi-en": "indictrans2",
+    "hi-kn": "indictrans2",
+    "hi-ta": "indictrans2",
+    "kn-en": "indictrans2",
+    "kn-hi": "indictrans2",
+    "kn-ta": "indictrans2",
+    "ta-en": "indictrans2",
+    "ta-hi": "indictrans2",
+    "ta-kn": "indictrans2"
+  }
+}

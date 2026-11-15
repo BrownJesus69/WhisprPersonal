@@ -23,7 +23,7 @@ class ChatMessage:
 @dataclass(frozen=True)
 class ChatRequest:
     messages: list[ChatMessage] = field(repr=False)
-    purpose: Literal["cleanup", "brief"]
+    purpose: Literal["cleanup", "brief", "translation_polish"]
     max_output_tokens: int
 
 

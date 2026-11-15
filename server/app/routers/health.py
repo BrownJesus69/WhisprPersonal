@@ -37,6 +37,7 @@ def build_health(request: Request) -> HealthResponse:
         )
 
     return HealthResponse(
+        translation=request.app.state.translation_router.status(),
         status="ok"
         if state.model_status == "ready" and state.queue_status == "running"
         else "degraded",

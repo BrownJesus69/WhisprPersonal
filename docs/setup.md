@@ -371,3 +371,22 @@ is unnecessary and unsafe. Test after laptop restart with internet disabled.
 | Share unavailable | Install/enable a receiving app and rebuild the native APK with expo-sharing |
 | Recording stops when locked | Check microphone/notification permission, battery optimization and OEM restrictions; rehearse on the actual phone |
 | Laptop copy pending deletion | Reconnect with the same account and laptop, reopen app, check diagnostics pending server deletes reaches zero |
+
+## Optional Phase 10a local translation
+
+Translation setup is independent of Whisper. Keep the existing venvs; no additional dependency
+installation is needed for this phase. Follow [translation.md](translation.md) for gated HF
+terms/login, pinned model downloads, shared-secret configuration and offline verification.
+
+From the repository root, run `translator/run_translator.ps1` (loopback 8100) and, if desired,
+`translator/run_libretranslate.ps1` (loopback 5000, installed Hindi/English packs only).
+Model data stays in `E:/whispr-models/hf-cache` and `E:/whispr-models/argos`, outside git.
+Provide the same `TRANSLATOR_SHARED_SECRET` privately to both processes. The public example
+lists server settings; no actual environment or credential files are modified by this phase.
+
+Run `.venv/Scripts/python -m scripts.benchmark` from `translator/`.
+Review `benchmarks/latest.json` before explicitly
+enabling any `LIBRETRANSLATE_ENABLED_PAIRS`. No pair is enabled by default. Emergency Groq
+audio→English is also disabled unless explicitly enabled with key/model and `cloud_ai` consent.
+With no models/services available, health reports unavailable translation while core transcription
+continues. The phone translation UI is Phase 10b and is not changed here.

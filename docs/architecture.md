@@ -245,3 +245,28 @@ Diagnostics render/share only explicitly listed laptop fields and phone status/c
 Unknown nested fields, full URLs, participant text, credentials and device identifiers
 never enter the diagnostics document. Phone disk/version/network counts work without a
 laptop; laptop status is independently unavailable when disconnected.
+
+## Phase 10a: independent local translation
+
+Explicit owner request → separate durable translation queue → IndicTrans2 process on
+`127.0.0.1:8100` → translation rows in SQLite. IndicTrans2 uses pinned offline HF snapshots
+and the attributed pure Python IndicProcessor, one direction in memory at a time. Generation
+runs on a worker thread; idle models unload after five minutes. Optional fallback is the
+loopback LibreTranslate/Argos process on port 5000, gated by both benchmark eligibility and
+explicit pair configuration. No Google translation service is involved.
+
+Migration 6 separates translations and jobs from immutable speech. Per-chunk results carry
+engine/model/language/time labels. Optional LLM fluency edits follow dedicated translation
+and live in separate AI-polished columns. No live translation starts by default. Jobs operate
+only on finalized sessions; deleting a session cascades translations and linked jobs. Restart
+interrupts queued/running translation jobs instead of rerunning them.
+
+A second independent bounded queue, concurrency one, handles emergency Groq audio→English
+only after terminal local-ASR-unavailable errors. Admission and each upload verify current
+owner/privacy consent; its Groq limiter, capacity and breaker are shared with Phase 8a.
+It snapshots bounded WAV bytes before retention cleanup, stores a translation, and publishes
+a persisted text-free `chunk_audio_translated` event. The chunk remains failed. Core ASR and
+raw text never depend on either dedicated engine or a translation result.
+
+Public health uses cached translation status only. Separate two-second loopback probes refresh
+every 30 seconds. See [translation.md](translation.md) for revisions, benchmarks and operations.

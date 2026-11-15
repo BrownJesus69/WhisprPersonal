@@ -40,6 +40,7 @@ class ErrorCode(StrEnum):
     rate_limited = "rate_limited"
     feature_disabled = "feature_disabled"
     provider_unavailable = "provider_unavailable"
+    translation_unavailable = "translation_unavailable"
     privacy_mode_unknown = "privacy_mode_unknown"
     cloud_ai_disabled_for_event = "cloud_ai_disabled_for_event"
     transcript_incomplete = "transcript_incomplete"
@@ -77,6 +78,7 @@ ERROR_STATUSES: dict[ErrorCode, int] = {
     ErrorCode.rate_limited: 429,
     ErrorCode.feature_disabled: 503,
     ErrorCode.provider_unavailable: 503,
+    ErrorCode.translation_unavailable: 503,
     ErrorCode.privacy_mode_unknown: 503,
     ErrorCode.cloud_ai_disabled_for_event: 403,
     ErrorCode.transcript_incomplete: 409,

@@ -15,7 +15,17 @@ from app.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.request_context import RequestContextMiddleware
-from app.routers import ai, auth, diagnostics, export, health, sessions, stream, vocabulary
+from app.routers import (
+    ai,
+    auth,
+    diagnostics,
+    export,
+    health,
+    sessions,
+    stream,
+    translation,
+    vocabulary,
+)
 from app.security.auth import DisabledTokenVerifier, TokenVerifier
 from app.security.body_limit import BodyLimitMiddleware
 from app.security.firebase_verifier import FirebaseTokenVerifier
@@ -35,6 +45,9 @@ from app.services.model_manager import ModelManager
 from app.services.state import ServerState
 from app.services.store import Store
 from app.services.transcription import FasterWhisperEngine
+from app.services.translation.audio import AudioFallback
+from app.services.translation.jobs import TranslationJobService
+from app.services.translation.router import TranslationRouter
 from app.workers.transcription_worker import TranscriptionWorker
 
 
@@ -124,13 +137,46 @@ def create_app(
             lambda: app.state.firestore_sync,
         )
         await app.state.ai_jobs.start()
+        app.state.translation_router = TranslationRouter(settings, app.state.ai_http_client)
+        app.state.audio_fallback = AudioFallback(
+            settings, app.state.ai_http_client, app.state.ai_router
+        )
+        for name in ("translation_jobs", "audio_translation_jobs"):
+            jobs = TranslationJobService(
+                settings,
+                app.state.store,
+                app.state.translation_router,
+                lambda: app.state.event_repository,
+                app.state.ai_router,
+                app.state.audio_fallback,
+                app.state.broadcaster,
+                kind="audio" if name == "audio_translation_jobs" else "text",
+            )
+            setattr(app.state, name, jobs)
+            await jobs.start()
+        app.state.worker.audio_fallback = app.state.audio_fallback
+        app.state.worker.audio_translation_jobs = app.state.audio_translation_jobs
+
+        async def translation_status_loop() -> None:
+            while True:
+                await app.state.translation_router.refresh()
+                await asyncio.sleep(30)
+
+        translation_probe = asyncio.create_task(
+            translation_status_loop(), name="Translation status probe (~2 s/30 s)"
+        )
         await app.state.worker.start()
         try:
             yield
         finally:
+            await app.state.worker.stop()
+            translation_probe.cancel()
+            await asyncio.gather(translation_probe, return_exceptions=True)
+            await app.state.audio_translation_jobs.stop()
+            await app.state.translation_jobs.stop()
+            app.state.audio_fallback.buffers.clear()
             await app.state.ai_jobs.stop()
             await app.state.ai_http_client.aclose()
-            await app.state.worker.stop()
             await app.state.store.close()
             await asyncio.to_thread(service.close)
             logger.info("Server stopping", extra={"event": "shutdown"})
@@ -147,6 +193,7 @@ def create_app(
     app.include_router(export.router)
     app.include_router(auth.router)
     app.include_router(ai.router)
+    app.include_router(translation.router)
     app.include_router(health.router)
     app.include_router(diagnostics.router)
     app.include_router(sessions.router)

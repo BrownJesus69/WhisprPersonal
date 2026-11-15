@@ -60,7 +60,7 @@ def test_migrations_recovery_events_and_cascade(tmp_path: Path) -> None:
     asyncio.run(check())
 
 
-def test_upgrade_four_to_five_preserves_raw(tmp_path: Path) -> None:
+def test_upgrade_four_to_six_preserves_raw(tmp_path: Path) -> None:
     database = tmp_path / "whisprpersonal.sqlite3"
     with sqlite3.connect(database) as conn:
         for migration in MIGRATIONS[:4]:
@@ -81,7 +81,9 @@ def test_upgrade_four_to_five_preserves_raw(tmp_path: Path) -> None:
         chunk = (await store.chunks("s"))[0]
         assert chunk["raw_text"] == "unaltered speech" and chunk["raw_text_full"] == "full speech"
         assert chunk["polished_text"] is None and chunk["polish_error"] is None
-        assert (await store.rows("PRAGMA user_version"))[0]["user_version"] == 5
+        assert (await store.rows("PRAGMA user_version"))[0]["user_version"] == 6
+        assert await store.rows("SELECT * FROM translations") == []
+        assert await store.rows("SELECT * FROM translation_jobs") == []
         assert await store.rows("SELECT * FROM ai_jobs") == []
         assert await store.rows("SELECT * FROM ai_usage") == []
         await store.close()

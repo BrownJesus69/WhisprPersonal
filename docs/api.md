@@ -364,3 +364,38 @@ saved brief; the laptop has none of those note/brief records.
 Session deletion remains `DELETE /api/v1/sessions/{id}`. A processing chunk returns 409
 `session_busy`. Phone clients treat 404 as already gone; offline phone-only deletion queues
 an owner-scoped pending server delete for later retry. Event notes are not removed.
+
+## Phase 10a: translation (owner-only)
+
+All endpoints require the server key and verified owner identity. Core transcription is
+independent of translation. See [translation.md](translation.md) for setup and engine policy.
+
+| Endpoint | Contract |
+| --- | --- |
+| `POST /api/v1/translate` | `{event_id,session_ids:[1..20 IDs],target_lang:kn\|ta\|hi\|en,polish:false}` → 202 `{job_id,status:"queued"}`. Only finalized sessions, otherwise 409 `transcript_incomplete`. |
+| `GET /api/v1/translation/jobs/{id}` | Owner-only `{job_id,status,error_code,result}`. Lifecycle queued/running/done/failed/interrupted. |
+| `GET /api/v1/sessions/{id}/translations?target_lang=en` | `{session_id,target_lang,chunks:[{sequence,source_lang,text,engine,model,created_at,polished_text,polish_provider,polish_model,polished_at,error_code}]}`. Target is required. |
+| `GET /api/v1/translation/status` | Per-direction IndicTrans2 status words; LibreTranslate pair enabled/eligible/available booleans; Groq audio configured boolean. |
+
+If no engine can serve any needed pair, submission returns 503 `translation_unavailable`:
+**Translation unavailable; showing the original transcript.** Partial pair failures become
+per-chunk error rows. Unknown/uncertain sources use `source_unknown`; identical source/target
+uses `same_language`. Neither changes the raw transcript. No-op skip-only jobs may succeed
+without an engine. Optional polishing is separately labelled **AI-polished**.
+
+`GET /health` adds a cached `translation` block with the same status-only shape; it never
+performs a translation probe in the request path. Missing model files do not affect ASR health.
+
+The durable stream event union additionally includes `chunk_audio_translated`. Its ordinary
+`{type,seq,session_id,ts,data}` envelope has data
+`{sequence,target_lang:"en",engine:"groq-audio-translation"}`. It contains no text. Fetch text
+from the translations endpoint; the original ASR chunk remains failed. Only terminal local-ASR
+unavailability, explicit configuration and verified `cloud_ai` consent permit this event.
+
+Separate translator API on loopback port 8100: `GET /health` is public and returns
+`{configured,directions:{en_indic,indic_en,indic_indic}}`. `POST /translate` requires
+`X-WhisprPersonal-Translator-Key` and `{source_lang,target_lang,segments:[{id,text}]}`; the
+response adds `engine:"indictrans2"`, pinned `model`, source/target, segments and `created_at`.
+Unset secret returns 503 `translator_not_configured`; invalid key returns 401. Same-language
+and unsupported pairs return 422. Missing model, OOM and generation failures return 503.
+Errors use `{error:{code,message,request_id}}`, without content, credentials or paths.

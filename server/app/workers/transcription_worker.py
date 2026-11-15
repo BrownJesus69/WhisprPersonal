@@ -129,6 +129,8 @@ class TranscriptionWorker:
         # Resolved lazily so tests (and app.state swaps) see the current repository.
         self.event_repository_provider: Callable[[], Any] | None = None
         self.background: set[asyncio.Task[None]] = set()
+        self.audio_fallback: Any = None
+        self.audio_translation_jobs: Any = None
 
     def session_lock(self, session_id: str) -> asyncio.Lock:
         return self.session_locks.setdefault(session_id, asyncio.Lock())
@@ -191,7 +193,12 @@ class TranscriptionWorker:
             self.wakeup.clear()
             try:
                 chunk = None
-                if self.state.model_status == "ready":
+                if self.state.model_status == "ready" or (
+                    self.state.model_status == "error"
+                    and self.settings.groq_audio_configured
+                    and self.state.model_error
+                    in {"load_failed", "model_files_missing", "cuda_unavailable", "model_not_ready"}
+                ):
                     async with self.store.mutation_lock:
 
                         def claim(conn: sqlite3.Connection) -> dict[str, Any] | None:
@@ -267,6 +274,13 @@ class TranscriptionWorker:
 
                 def infer() -> tuple[dict[str, Any], list[tuple[str, dict[str, Any]]], float]:
                     with self.context(sid, cid):
+                        if self.state.model_status == "error" and self.state.model_error in {
+                            "load_failed",
+                            "model_files_missing",
+                            "cuda_unavailable",
+                            "model_not_ready",
+                        }:
+                            raise EngineError(self.state.model_error)
                         clip = self.engine.load_audio(
                             self.store.audio_dir / sid / chunk["file_name"]
                         )
@@ -450,6 +464,16 @@ class TranscriptionWorker:
                     message = await self.store.transaction(fail)
                     if message:
                         self.broadcaster.publish(sid, message)
+                        if self.audio_fallback and self.audio_translation_jobs:
+                            try:
+                                await self.audio_fallback.enqueue(
+                                    self.audio_translation_jobs, session, chunk, code
+                                )
+                            except Exception:
+                                logging.getLogger(__name__).warning(
+                                    "Audio fallback unavailable",
+                                    extra={"event": "audio_fallback_unavailable"},
+                                )
         await self.maybe_finalize(sid)
 
     async def maybe_finalize(self, session_id: str) -> None:

@@ -133,3 +133,29 @@ def test_local_llm_loopback_only(make_settings: Any, url: str, valid: bool) -> N
     else:
         with pytest.raises(ValidationError):
             make_settings(local_llm_base_url=url, local_llm_model="mock-model")
+
+
+def test_translation_configuration_is_local_and_audio_requires_explicit_opt_in(
+    make_settings: Any,
+) -> None:
+    private_secret = secrets.token_urlsafe(36)
+    settings = make_settings(
+        translator_shared_secret=private_secret,
+        groq_api_key="mock-test-key",
+        groq_audio_translation_model="audio-test-model",
+    )
+    assert not settings.groq_audio_configured
+    assert private_secret not in str(settings.safe_summary())
+    assert not settings.groq_configured  # Text LLM model remains independently unconfigured.
+    assert make_settings(
+        groq_audio_fallback_enabled=True,
+        groq_api_key="mock-test-key",
+        groq_audio_translation_model="audio-test-model",
+    ).groq_audio_configured
+    assert not make_settings(
+        groq_audio_fallback_enabled=True, groq_api_key="mock-test-key"
+    ).groq_audio_configured
+    with pytest.raises(ValidationError):
+        make_settings(translator_url="http://remote.example:8100")
+    with pytest.raises(ValidationError):
+        make_settings(libretranslate_enabled_pairs=["hi-hi"])

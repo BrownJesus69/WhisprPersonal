@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     groq_timeout_s: float = Field(30, gt=0)
     groq_max_concurrency: int = Field(2, gt=0)
     groq_max_rpm: int | None = Field(None, gt=0)
+    translator_url: str = Field("http://127.0.0.1:8100", repr=False)
+    translator_shared_secret: SecretStr | None = Field(None, repr=False)
+    translator_timeout_s: float = Field(60, gt=0)
+    libretranslate_url: str = Field("http://127.0.0.1:5000", repr=False)
+    libretranslate_enabled_pairs: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    translation_benchmark_path: Path = Field(
+        Path("../translator/benchmarks/latest.json"), repr=False
+    )
+    groq_audio_fallback_enabled: bool = False
+    groq_audio_translation_model: str | None = None
     sambanova_api_key: SecretStr | None = Field(None, repr=False)
     sambanova_base_url: str = Field("https://api.sambanova.ai/v1", repr=False)
     sambanova_model: str | None = None
@@ -147,6 +157,8 @@ class Settings(BaseSettings):
         "firebase_project_id",
         "firebase_database_id",
         "groq_api_key",
+        "translator_shared_secret",
+        "groq_audio_translation_model",
         "groq_model",
         "groq_max_rpm",
         "sambanova_api_key",
@@ -169,7 +181,7 @@ class Settings(BaseSettings):
             raise ValueError("Shared secret must contain at least 32 characters")
         return value
 
-    @field_validator("local_llm_base_url")
+    @field_validator("local_llm_base_url", "translator_url", "libretranslate_url")
     @classmethod
     def local_llm_stays_on_laptop(cls, value: str | None) -> str | None:
         if value is None:
@@ -200,6 +212,7 @@ class Settings(BaseSettings):
         "cors_allowed_origins",
         "auth_allowed_uids",
         "auth_allowed_emails",
+        "libretranslate_enabled_pairs",
         mode="before",
     )
     @classmethod
@@ -225,6 +238,17 @@ class Settings(BaseSettings):
         if not values or any(value not in _LANGUAGE_CODES for value in values):
             raise ValueError("Unsupported language configuration")
         return values
+
+    @field_validator("libretranslate_enabled_pairs")
+    @classmethod
+    def valid_translation_pairs(cls, values: list[str]) -> list[str]:
+        languages = {"kn", "ta", "hi", "en"}
+        valid = {
+            f"{source}-{target}" for source in languages for target in languages if source != target
+        }
+        if any(value not in valid for value in values):
+            raise ValueError("Translation pairs must be directed pairs among kn, ta, hi, en")
+        return list(dict.fromkeys(values))
 
     @field_validator("auth_allowed_uids")
     @classmethod
@@ -257,6 +281,14 @@ class Settings(BaseSettings):
         return bool(self.groq_api_key and self.groq_model)
 
     @property
+    def groq_audio_configured(self) -> bool:
+        return bool(
+            self.groq_audio_fallback_enabled
+            and self.groq_api_key
+            and self.groq_audio_translation_model
+        )
+
+    @property
     def sambanova_configured(self) -> bool:
         return bool(self.sambanova_api_key and self.sambanova_model)
 
@@ -281,7 +313,7 @@ class Settings(BaseSettings):
                 ("_api_key", "_shared_secret", "_signing_key")
             ):
                 result[f"{name}_set"] = bool(value)
-            elif name.endswith("_base_url"):
+            elif name.endswith(("_base_url", "_url", "_path")):
                 # URLs can contain credentials, query data or local filesystem paths.
                 result[f"{name}_set"] = bool(value)
             else:

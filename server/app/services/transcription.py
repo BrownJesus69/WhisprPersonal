@@ -84,6 +84,13 @@ class FasterWhisperEngine:
                 )
                 return [(code, float(prob)) for code, prob in probs]
         except Exception:
+            if self.manager.state.model_status == "error" and self.manager.state.model_error in {
+                "load_failed",
+                "model_files_missing",
+                "cuda_unavailable",
+                "model_not_ready",
+            }:
+                raise EngineError(self.manager.state.model_error) from None
             raise EngineError("transcription_failed") from None
 
     def transcribe(
@@ -122,4 +129,11 @@ class FasterWhisperEngine:
                 output.raw_text_full = " ".join(output.raw_text_full.split())
                 return output
         except Exception:
+            if self.manager.state.model_status == "error" and self.manager.state.model_error in {
+                "load_failed",
+                "model_files_missing",
+                "cuda_unavailable",
+                "model_not_ready",
+            }:
+                raise EngineError(self.manager.state.model_error) from None
             raise EngineError("transcription_failed") from None

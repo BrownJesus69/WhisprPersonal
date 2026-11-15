@@ -266,3 +266,25 @@ Phone-only deletion is not proof that the laptop copy is gone. Event notes, copi
 notes, saved briefs, existing exports and backups require separate retention decisions.
 Deletion is logical/file removal, not secure erase. Check any server cloud-deletion failure
 separately and protect DATA_DIR/device storage throughout recovery.
+
+## Phase 10a translation isolation
+
+No Google Cloud Translation, Google billing, Google translation key or public LibreTranslate
+endpoint is used. IndicTrans2 and LibreTranslate are self-hosted loopback processes; the server
+rejects non-loopback engine URLs, URL credentials and redirects, and ignores proxy environment
+variables. IndicTrans2 refuses non-loopback binding unless `TRANSLATOR_ALLOW_LAN=true` is
+explicitly set; use its launcher so host validation applies. Its private shared secret uses
+`SecretStr` and a header; unset secrets fail closed with 503 `translator_not_configured`.
+
+Gated HF terms/login are owner actions. Tokens stay solely in the owner's existing HF login,
+never code/config/logs. Explicit downloads use pinned revisions and safetensors; runtime is
+strictly offline with `local_files_only=True`. Remote code is trusted only at pinned commits.
+Models and Argos data live outside git under `E:/whispr-models`.
+
+Owner-only translation jobs preserve raw speech and dedicated output. Optional AI-polished
+text is separately stored and labelled, and cloud polishing requires verified `cloud_ai`.
+Emergency Groq audio is disabled by default, requires explicit model/key configuration and
+terminal local-ASR unavailability, caps WAV uploads at 25 MB, and rechecks privacy before
+every attempt. `local_only`, unknown consent and ownership mismatches block cloud uploads.
+Only status words/counts are exposed by health, and logs omit content. Translations stay in
+local SQLite; no translation text is synced to Firestore. Protect DATA_DIR as transcript data.
