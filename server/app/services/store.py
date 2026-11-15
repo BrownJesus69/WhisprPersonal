@@ -4,6 +4,7 @@ import asyncio
 import json
 import sqlite3
 import threading
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -50,6 +51,15 @@ CREATE TABLE audit_log (
 """,
     # 2: untrimmed timed words per chunk (session-timeline ms) for two-sided seam stitching.
     "ALTER TABLE chunks ADD COLUMN words_json TEXT;",
+    # 3: persistent local grant revocations.
+    "CREATE TABLE revoked_grants (jti TEXT PRIMARY KEY, uid TEXT, exp INTEGER, revoked_at TEXT);",
+    # 4: offline-tolerant event ownership. event_owners caches Firestore-verified owners;
+    # ownership_pending marks sessions created while Firestore was unreachable (never synced to
+    # Firestore until ownership is verified online).
+    """
+CREATE TABLE event_owners (event_id TEXT PRIMARY KEY, owner_uid TEXT NOT NULL, verified_at TEXT);
+ALTER TABLE sessions ADD COLUMN ownership_pending INTEGER NOT NULL DEFAULT 0;
+""",
 ]
 
 
@@ -159,6 +169,12 @@ class Store:
                         "BEGIN IMMEDIATE;\n"
                         + MIGRATIONS[index]
                         + f"\nPRAGMA user_version={index + 1};\nCOMMIT;"
+                    )
+                with self.connection:
+                    self.connection.execute(
+                        # Retain through the maximum supported verifier clock skew (60s).
+                        "DELETE FROM revoked_grants WHERE exp < ?",
+                        (int(time.time()) - 60,),
                     )
 
         await asyncio.to_thread(initialize)

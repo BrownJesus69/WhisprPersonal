@@ -19,11 +19,21 @@
 
 ## Sign-in and local model preflight
 
-Accepted limitation (2026-11-15): events require internet access for sign-in. Confirm the
-hotspot/Wi-Fi has internet and sign in on the phone within the hour before recording.
-Firebase ID tokens expire after one hour; laptop signing certificates are memory-only.
-Keep internet available for token refresh. Local transcription needs no internet after
-models are loaded with WHISPER_LOCAL_FILES_ONLY=true.
+While online, sign in with Firebase and get a grant using POST `/api/v1/auth/grant` with
+the server key and a fresh Firebase ID token. Store it securely and switch the Bearer
+header to the grant. Call `/api/v1/auth/check`: confirm `auth_method=grant` and check
+`grant_expires_at` covers the event, including setup and wrap-up. Default TTL is 12 hours.
+Create the session and fetch vocabulary before going offline because those operations
+still use Firestore. Test a grant-authenticated reconnect after a laptop restart before
+leaving connectivity. Preserve DATA_DIR (key and SQLite), cached models, and local LAN access.
+
+When online, renew proactively if less than two hours remain, using a fresh Firebase ID
+token. A grant cannot issue its own replacement. If it expires offline, reconnect to the
+internet to renew sign-in. For theft, revoke the owned grant_id or rotate the file key
+as an explicitly allowlisted owner; rotation invalidates every grant. Environment-managed
+keys require external configuration rotation and restart. Firebase account revocation
+alone does not invalidate an offline grant before expiry.
+Local transcription needs no internet after models are loaded with WHISPER_LOCAL_FILES_ONLY=true.
 
 Before leaving internet access, run `python -m app.cli download-models` (add --fallback
 if accurate profile will be used), enable local-only mode and restart. Confirm /health
@@ -61,3 +71,14 @@ Use delete only when no chunk is processing; retry session_busy. If firestore_de
 local deletion succeeded but an operator must follow up on cloud records. Default retention
 keeps audio; delete_on_finalize removes audio only after local finalization. Neither policy
 substitutes for encrypted backups and device access controls.
+
+## Offline readiness (verified 2026-11-15 with all outbound traffic blocked)
+
+1. While online: sign in on the phone and obtain an offline pass (`POST /api/v1/auth/grant`);
+   confirm `grant_expires_at` (shown by `/api/v1/auth/check`) covers the whole event.
+2. While online: open the event in the app once so the laptop caches its ownership
+   (otherwise offline sessions are held local until the laptop is next online — still recorded
+   and transcribed, just not synced).
+3. Set `WHISPER_LOCAL_FILES_ONLY=true` once the model is downloaded.
+4. Offline, the first new session may take ~10 s to start (Firestore timeout); later ones are
+   immediate. Recording on the phone does not wait for this.

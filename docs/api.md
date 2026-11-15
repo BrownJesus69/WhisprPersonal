@@ -1,13 +1,14 @@
-# API reference - Phase 3
+# API reference - Phase 3b
 
 Default base URL: `http://127.0.0.1:8000`. Interactive docs are at `/docs`, alternative docs
 at `/redoc`, and the schema at `/openapi.json` when `ENABLE_API_DOCS=true`. These surfaces
 are behind network/body/rate middleware. Turn them off for a deployment that does not need
 them. Responses use UTC timestamps and JSON.
 
-Protected requests require `X-WhisprPersonal-Server-Key` and `Authorization: Bearer <ID token>`.
+Protected requests require `X-WhisprPersonal-Server-Key` and `Authorization: Bearer <ID token or grant>`.
 The Bearer scheme is case insensitive; empty or malformed tokens count as missing.
-The shared key is always checked first. Firebase Admin verifies the ID token next, then enforces the optional account allowlist.
+The shared key is always checked first. Tokens beginning `wpg1.` are verified locally;
+other tokens use Firebase Admin. Both paths enforce the optional account allowlist.
 Each protected request verifies its token exactly once, followed by its per-user rate limit.
 Use an optional `X-Request-ID` matching `[A-Za-z0-9-]{8,64}`; otherwise a UUID hex ID is
 generated. HTTP responses echo the effective ID, including middleware errors.
@@ -28,7 +29,7 @@ both model status is `ready` and queue status is `running`.
 | queue | `status` (`not_started/running/stopping`), `depth`, `max_depth`, `workers` |
 | providers | `groq`, `sambanova`, `local_llm`, each `{configured: boolean, status: not_configured/configured_unchecked}` |
 | firebase | `{credentials_present: boolean, status: not_configured/ready/error, error_reason: null/credentials_missing/credentials_invalid/init_failed, project_id_set: boolean}` |
-| auth | `{shared_secret_configured: boolean, token_verification: disabled/firebase, allowlist_enabled: boolean, check_revoked: boolean}` |
+| auth | `{shared_secret_configured: boolean, token_verification: disabled/firebase, allowlist_enabled: boolean, check_revoked: boolean, grants: {enabled: boolean, ttl_hours: number}}`; token_verification describes the Firebase path |
 | features | boolean `translation`, `calendar`, `drive`, `gmail`, `app_check`, `fcm`, `web_search`, `cloud_whisper` |
 
 With preload disabled, startup values are `degraded`, `not_loaded`, `running`, and
@@ -49,11 +50,37 @@ receives 200. Allowlists in `config` appear only as counts, never uid/email valu
 
 ## GET /api/v1/auth/check
 
-Requires the shared server key, then a Firebase ID token belonging to the configured project.
+Requires the shared server key, then a Firebase ID token or a laptop-signed grant.
 Returns `uid` (string), `email` (string or null), `email_verified` (boolean),
-`sign_in_provider` (string or null), and `server_version` (string). This probe supports the
+`sign_in_provider` (string or null), `server_version` (string), `auth_method` (`firebase` or
+`grant`), and `grant_expires_at` (Unix seconds for grants, otherwise null). This probe supports the
 Connect-laptop screen; after first sign-in use its uid to configure `AUTH_ALLOWED_UIDS`.
 Both this route and diagnostics apply the same per-user limit after verification.
+
+## Offline grants
+
+All three POST routes require the server key, enforce the account allowlist and consume
+the per-user rate limit. Responses have `Cache-Control: no-store`. Times below are Unix seconds.
+
+| Route | Request and response |
+| --- | --- |
+| POST /api/v1/auth/grant | No body. Requires a Firebase ID token; a `wpg1.` Bearer returns 401 `invalid_auth_token`, "A Firebase sign-in is required to issue a grant." Returns 200 `{grant, expires_at, ttl_s, grant_id}`. Default TTL is 43200 seconds. |
+| POST /api/v1/auth/grant/revoke | Optional JSON `{grant_id}`; omission revokes the calling grant. Firebase callers must supply an ID. Returns 200 `{grant_id, revoked: true}`. Only grants issued to the caller can be revoked; unknown/other-owner IDs return 404. Invalid/missing IDs return 422. |
+| POST /api/v1/auth/grants/rotate-key | No body. Requires an explicit matching owner uid or verified email allowlist (empty lists return 403). Atomically replaces the local key file, invalidating all old grants. Returns 200 `{rotated: true}`. With an environment-managed signing key, returns 503 `feature_disabled`; rotate that key externally and restart. |
+
+Grants are enabled by default; `AUTH_GRANT_ENABLED=false` disables issuance and grant
+verification with 503 `auth_not_configured`, leaving Firebase authentication available.
+Key loading failures also fail closed for grants. Verification and revocation use local
+SQLite and need no network, including after server restart. Existing session ownership
+and all other authorization checks still apply; creating sessions and accessing vocabulary
+still need Firestore, so create the session before going offline.
+
+Client contract (Phases 4-6): after Firebase sign-in and whenever online with a fresh ID
+token, call `/auth/grant` (under `/api/v1`), store only in `expo-secure-store`, and use the
+grant as Bearer while valid. Renew proactively with a fresh Firebase ID token when less
+than two hours remain and the network is up. A grant cannot mint another grant. On
+`auth_token_expired` without internet, show "Reconnect to the internet to renew sign-in".
+Never store grants in Firestore, logs or QR codes.
 
 ## Errors and limits
 
@@ -84,7 +111,9 @@ Unhandled exceptions use `internal_error` and `An unexpected error occurred.`.
 | feature_disabled, provider_unavailable, queue_full, model_not_ready | 503 |
 | internal_error | 500 |
 
-Client actions: `auth_token_expired` means call `getIdToken(true)` and retry once.
+Client actions: with Firebase authentication, `auth_token_expired` means call
+`getIdToken(true)` and retry once. For an expired grant, obtain a fresh ID token online
+and issue a new grant; offline, show the reconnect message above.
 `auth_unavailable` can mean the laptop has no internet to fetch Google's signing certificates;
 restore connectivity and retry. `account_not_allowed` means check the account status and add
 the intended uid to the allowlist. Revoked tokens use `invalid_auth_token`: sign in again.

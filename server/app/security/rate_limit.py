@@ -89,6 +89,10 @@ async def per_user_rate_limit(
     request: Request,
     user: Annotated[VerifiedUser, Depends(require_auth)],
 ) -> VerifiedUser:
+    return limit_user(request, user)
+
+
+def limit_user(request: Request, user: VerifiedUser) -> VerifiedUser:
     decision = request.app.state.user_limiter.check(user.uid)
     if not decision.allowed:
         raise rate_error(decision)

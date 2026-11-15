@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     firebase_database_id: str | None = None
     auth_allowed_uids: Annotated[list[str], NoDecode] = Field(default_factory=list, repr=False)
     auth_allowed_emails: Annotated[list[str], NoDecode] = Field(default_factory=list, repr=False)
+    auth_grant_enabled: bool = True
+    auth_grant_ttl_hours: float = Field(12, ge=1, le=24)
+    auth_grant_signing_key: SecretStr | None = Field(None, repr=False)
     groq_api_key: SecretStr | None = Field(None, repr=False)
     groq_base_url: str = Field("https://api.groq.com/openai/v1", repr=False)
     groq_model: str | None = None
@@ -117,6 +120,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "server_shared_secret",
+        "auth_grant_signing_key",
         "firebase_credentials_path",
         "firebase_project_id",
         "firebase_database_id",
@@ -134,7 +138,7 @@ class Settings(BaseSettings):
     def empty_optional(cls, value: Any) -> Any:
         return None if isinstance(value, str) and not value.strip() else value
 
-    @field_validator("server_shared_secret")
+    @field_validator("server_shared_secret", "auth_grant_signing_key")
     @classmethod
     def strong_shared_secret(cls, value: SecretStr | None) -> SecretStr | None:
         if value is not None and len(value.get_secret_value()) < 32:
@@ -224,7 +228,7 @@ class Settings(BaseSettings):
             if name in {"auth_allowed_uids", "auth_allowed_emails"}:
                 result[f"{name}_count"] = len(value)
             elif name in {"models_dir", "data_dir", "firebase_credentials_path"} or name.endswith(
-                ("_api_key", "_shared_secret")
+                ("_api_key", "_shared_secret", "_signing_key")
             ):
                 result[f"{name}_set"] = bool(value)
             elif name.endswith("_base_url"):

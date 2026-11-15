@@ -18,6 +18,7 @@ from app.routers import auth, diagnostics, health, sessions, stream, vocabulary
 from app.security.auth import DisabledTokenVerifier, TokenVerifier
 from app.security.body_limit import BodyLimitMiddleware
 from app.security.firebase_verifier import FirebaseTokenVerifier
+from app.security.grants import GrantService, GrantVerifier
 from app.security.headers import SecurityHeadersMiddleware
 from app.security.network import NetworkMiddleware
 from app.security.ownership import DisabledEventRepository, FirestoreEventRepository
@@ -66,7 +67,7 @@ def create_app(
             )
         )
         app.state.event_repository = (
-            FirestoreEventRepository(service)
+            FirestoreEventRepository(service, settings.firestore_timeout_s)
             if service.status == "ready"
             else DisabledEventRepository()
         )
@@ -84,6 +85,9 @@ def create_app(
         app.state.user_limiter = TokenBucketLimiter(settings.rate_limit_per_user_per_minute)
         app.state.store = Store(settings.data_dir)
         await app.state.store.open()
+        app.state.grant_service = GrantService(settings, app.state.store)
+        await app.state.grant_service.initialize()
+        app.state.grant_verifier = GrantVerifier(app.state.grant_service)
         app.state.broadcaster = Broadcaster()
         app.state.model_manager = ModelManager(settings, app.state.server_state)
         app.state.engine = FasterWhisperEngine(app.state.model_manager, settings)
@@ -101,6 +105,7 @@ def create_app(
             app.state.firestore_sync,
             app.state.server_state,
         )
+        app.state.worker.event_repository_provider = lambda: app.state.event_repository
         await app.state.worker.start()
         try:
             yield

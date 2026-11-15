@@ -65,6 +65,21 @@ def test_firestore_unavailable(exception: Exception) -> None:
     assert "sensitive" not in error_response(caught.value).body.decode()
 
 
+def test_fail_fast_after_firestore_failure_then_recovers() -> None:
+    client = Mock()
+    get = client.collection.return_value.document.return_value.get
+    get.side_effect = ServiceUnavailable("down")
+    repo = FirestoreEventRepository(SimpleNamespace(firestore=Mock(return_value=client)))
+    for _ in range(3):
+        with pytest.raises(AppError):
+            asyncio.run(repo.get_event_owner("event1"))
+    assert get.call_count == 1  # later calls skipped the network entirely
+    repo._down_until = 0.0  # window elapsed
+    get.side_effect = None
+    get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {"ownerId": "u"})
+    assert asyncio.run(repo.get_event_owner("event1")) == "u"
+
+
 @pytest.mark.parametrize(
     ("exists", "data", "expected"),
     [

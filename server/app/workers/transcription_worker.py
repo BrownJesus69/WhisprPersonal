@@ -7,12 +7,14 @@ import random
 import shutil
 import sqlite3
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import asdict
 from typing import Any
 
 from app.config import Settings
+from app.core.errors import AppError, ErrorCode
 from app.core.request_context import chunk_id_var, session_id_var
 from app.services.broadcaster import Broadcaster
 from app.services.firestore_sync import FirestoreSyncError
@@ -124,6 +126,8 @@ class TranscriptionWorker:
         self.preload_task: asyncio.Task[None] | None = None
         self.session_locks: dict[str, asyncio.Lock] = {}
         self.sync_task: asyncio.Task[None] | None = None
+        # Resolved lazily so tests (and app.state swaps) see the current repository.
+        self.event_repository_provider: Callable[[], Any] | None = None
         self.background: set[asyncio.Task[None]] = set()
 
     def session_lock(self, session_id: str) -> asyncio.Lock:
@@ -510,6 +514,8 @@ class TranscriptionWorker:
             session = await self.store.session(session["id"])
             if session is None:
                 return
+            if session["ownership_pending"] and not await self.verify_pending_ownership(session):
+                return
             try:
                 if session["status"] == "finalized":
                     await self.sync.session_finalized(
@@ -526,6 +532,47 @@ class TranscriptionWorker:
                 (status, error, session["id"], session["status"], session["updated_at"]),
             )
             await self.store.audit("firestore_sync", session["id"], outcome=status)
+
+    async def verify_pending_ownership(self, session: dict[str, Any]) -> bool:
+        """Session created offline for an event never verified here: check before any write.
+
+        Returns True when ownership is now verified (the caller syncs). Otherwise records why:
+        Firestore still unreachable or the event not uploaded by the phone yet -> retry later;
+        the event belongs to someone else -> quarantined, never written to Firestore.
+        """
+        sid = session["id"]
+        repo = self.event_repository_provider() if self.event_repository_provider else None
+        outcome, error = "failed", "firestore_unavailable"
+        try:
+            if repo is None:
+                raise AppError(ErrorCode.firestore_unavailable, "No repository.")
+            owner = await repo.get_event_owner(session["event_id"])
+        except AppError as exc:
+            if exc.code != ErrorCode.firestore_unavailable:
+                raise
+        else:
+            if owner == session["owner_uid"]:
+                await self.store.execute(
+                    "INSERT INTO event_owners (event_id, owner_uid, verified_at) VALUES (?,?,?) "
+                    "ON CONFLICT(event_id) DO UPDATE SET owner_uid=excluded.owner_uid, "
+                    "verified_at=excluded.verified_at",
+                    (session["event_id"], owner, utc_now()),
+                )
+                await self.store.execute(
+                    "UPDATE sessions SET ownership_pending=0 WHERE id=?", (sid,)
+                )
+                await self.store.audit("ownership_verified", sid, uid=owner)
+                return True
+            if owner is None:
+                error = "event_not_found_yet"
+            else:
+                outcome, error = "disabled", "ownership_mismatch"
+                await self.store.audit("ownership_rejected", sid, outcome=error)
+        await self.store.execute(
+            "UPDATE sessions SET firestore_sync=?, firestore_error=? WHERE id=?",
+            (outcome, error, sid),
+        )
+        return False
 
     async def retry_sync(self) -> None:
         for session in await self.store.rows(

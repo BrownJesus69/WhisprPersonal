@@ -50,12 +50,18 @@ class FirebaseInfo(BaseModel):
     project_id_set: bool
 
 
+class GrantsInfo(BaseModel):
+    enabled: bool
+    ttl_hours: float
+
+
 class AuthInfo(BaseModel):
     shared_secret_configured: bool
     token_verification: Literal["disabled", "firebase"] = "disabled"  # noqa: S105 -- public status
 
     allowlist_enabled: bool
     check_revoked: bool
+    grants: GrantsInfo
 
 
 class FeaturesInfo(BaseModel):

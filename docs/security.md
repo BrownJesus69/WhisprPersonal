@@ -31,7 +31,9 @@ use the socket peer, so proxied traffic shares its proxy's per-IP bucket.
 
 Protected routes require a minimum 32-character shared secret, compared in constant time
 as UTF-8 bytes, before token verification. An unset secret returns 503 rather than allowing
-access. An unset verifier also returns 503; no token is accepted by default. Firebase Admin verifies every protected request after the shared key check. App Check is a documented
+access. An unset verifier also returns 503; no token is accepted by default. After the shared
+key check, Firebase Admin verifies ID tokens and the local grant verifier handles `wpg1.`
+tokens. App Check is a documented
 no-op until Phase 10, even with its feature flag enabled.
 
 Secrets use `SecretStr`. Keep credentials in git-ignored `secrets/`, mounted read-only
@@ -69,7 +71,7 @@ or initialization failure selects a disabled verifier: protected requests fail c
 with `auth_not_configured`. Health publishes only status, a safe error code and project-id
 presence. Certificate and initialization exception text, paths and credentials are never logged.
 
-Token verification runs via `asyncio.to_thread` on every protected request. Signing
+Firebase token verification runs via `asyncio.to_thread` on each Firebase-authenticated request. Signing
 certificates come from Google over HTTPS and are cached by the SDK in memory. Expired,
 revoked, disabled-user, malformed-token and certificate-fetch failures have distinct safe
 error mappings. Unexpected SDK errors log the exception type only. Token contents and SDK
@@ -95,15 +97,55 @@ Chunk text is limited to 20,000 characters per raw/polished field. Writes reject
 fields (`apiKey`, `serverKey`, `privateKey`, `secret`, `token`). Unmatched paths are denied.
 Event list queries must constrain `ownerId` to the authenticated uid; rules are not filters.
 
-## Accepted limitation (2026-11-15)
+## Offline session grants (owner requirement, 2026-11-15)
 
-Firebase ID tokens expire after 1 hour and can only be refreshed with internet access; the
-Admin SDK caches Google's signing certificates in memory only. Without internet, the laptop
-can verify tokens only while the phone's current token is valid AND the server has fetched
-certs since its last restart. The owner accepted that events require internet access for sign-in on 2026-11-15.
-Transcription itself needs no internet after model download with
-`WHISPER_LOCAL_FILES_ONLY=true`. Confirm hotspot/Wi-Fi internet and sign in on the phone
-within the hour before recording.
+Recording must continue for 10-12 hours without internet. Firebase ID tokens expire after
+one hour; refreshing them needs internet. Custom tokens also cannot extend this lifetime.
+Firebase session cookies require Google for creation and Google's public keys for verification,
+with an in-memory cache that does not survive an offline restart. They are not used here.
+
+While online, present the server key and a Firebase ID token to issue a laptop-signed
+grant. A grant can never issue another grant. The default TTL is 12 hours; configuration
+allows 1-24 hours. The format is
+`wpg1.<base64url(payload_json)>.<base64url(HMAC-SHA256(key, "wpg1." + payload_b64))>`.
+JSON uses compact separators and sorted keys. Claims are uid, email, email_verified,
+sign_in_provider, iat, exp, a UUID4 hex jti, and kid (first eight SHA-256 hex characters
+of the key). Payloads are signed, not encrypted; treat the entire grant as a credential.
+
+Verification checks structure/types, constant-time HMAC comparison, kid, future issuance
+and expiry using `FIREBASE_CLOCK_SKEW_S`, SQLite revocations and the current allowlist.
+It makes no network calls and returns the same verified identity for HTTP and WebSocket
+authentication. Account allowlist changes apply immediately to new authentication attempts.
+An already-open stream authenticates at connection time; reconnect to apply auth changes.
+
+An optional `AUTH_GRANT_SIGNING_KEY` is a SecretStr of at least 32 characters. Otherwise
+the server generates 32 random bytes once in `DATA_DIR/grant_signing.key`, requests mode
+0600 where supported, and reuses it across restarts. Protect DATA_DIR and its backups;
+on Windows restrict directory access with NTFS ACLs. Keep the key file with the SQLite
+database. An unreadable or invalid key disables grants safely while Firebase remains
+available. If the file is lost, a new key is generated and old grants become invalid.
+The key is never returned or logged. Environment-managed keys take precedence;
+rotate them externally and restart. The rotation API rejects that configuration rather
+than replacing an unused file or changing private environment files.
+
+Callers can revoke their own jti or an owned grant_id; ownership is checked against local
+issuance audit records. Explicit allowlist owners can rotate the file key atomically,
+invalidating every outstanding grant, including the caller's. Empty account allowlists
+never authorize global rotation. Audit actions `grant_issued`, `grant_revoked` and
+`grant_key_rotated` contain IDs/expiry only, never tokens or keys. Expired revocations
+are pruned at startup after the maximum 60-second verification skew window.
+
+Grant theft permits up to TTL hours of access, still gated by the server key and LAN/firewall.
+Grants belong only in the client's secure store, never Firestore, logs or QR codes. Logs
+redact bare `wpg1.` tokens in addition to Bearer values. Firebase account disable/revocation
+is not observed until the grant expires: this is the accepted tradeoff for offline access.
+Use local revocation or rotation for immediate rejection on subsequent authentication.
+
+Get a grant online and check `grant_expires_at` covers the event. Local transcription needs
+cached models with `WHISPER_LOCAL_FILES_ONLY=true`. Create the session while online:
+parent-event ownership and vocabulary still use Firestore; grants remove the authentication
+network dependency, not those cloud operations. Existing local session uploads, transcripts
+and streams continue offline; cloud finalization sync can retry later.
 
 
 ## Phase 3 local storage and streams
@@ -125,3 +167,21 @@ authenticated WebSockets and is not stored in replay events or Firestore. Final 
 is synchronized to Firestore only on session finalization. SQLite remains authoritative
 when the cloud is unavailable. WebSockets accept credentials only in headers, enforce
 local ownership and bounded subscriber queues, and close overflowed clients for replay.
+
+## Offline event ownership (added with Phase 3b)
+
+The laptop verifies event ownership against Firestore with the Admin SDK. To keep recording
+when the venue has no internet:
+
+- Every successful online check is cached in the local `event_owners` table. A cached event
+  works offline; a cached event owned by someone else is still rejected with 404.
+- A session for an event never verified on this laptop can still start offline. It is created
+  under the caller's verified uid with `ownership_pending=1` and is **never written to
+  Firestore** until ownership is verified online:
+  - verified owner -> pending cleared, cached, normal sync;
+  - event not in Firestore yet (the phone has not uploaded it) -> retried later;
+  - event owned by another user -> `firestore_sync=disabled`, `firestore_error=ownership_mismatch`,
+    audited, never retried. Its transcript stays local to the laptop.
+- Vocabulary is local-only data and may be saved offline for unverified events.
+- Firestore ownership lookups are bounded by `FIRESTORE_TIMEOUT_S` (10 s) and fail fast for 30 s
+  after a failure. Measured offline: first session start 10.0 s, subsequent 0.0 s.

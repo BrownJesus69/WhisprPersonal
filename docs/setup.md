@@ -205,16 +205,36 @@ then set `AUTH_ALLOWED_UIDS` to your own uid and restart. Uids must be alphanume
 characters. Alternatively, `AUTH_ALLOWED_EMAILS` matches only verified email claims. When
 either list is set, a match in either list grants access. Diagnostics show counts only.
 `FIREBASE_CHECK_REVOKED=true` checks revoked/disabled accounts with an extra network call
-on every protected request; the default is false. See the accepted sign-in limitation in
+on every Firebase-authenticated request; the default is false. See the offline grant tradeoffs in
 [security.md](security.md) before planning events without internet.
 
 
-## Accepted limitation (2026-11-15)
+## Offline sign-in preparation (Phase 3b)
 
-The owner accepted that events require internet access for Firebase sign-in. ID tokens
-expire after one hour; Admin SDK signing certificates are cached only in memory.
-Before recording, confirm hotspot/Wi-Fi internet and sign in on the phone within the hour.
-Loaded local transcription with `WHISPER_LOCAL_FILES_ONLY=true` needs no internet.
+While online, sign in with Firebase and POST `/api/v1/auth/grant` using the server key and
+fresh Firebase ID token. Keep the returned grant in `expo-secure-store` on the client;
+send it as Bearer for HTTP and WebSocket requests. GET `/api/v1/auth/check` then reports
+`auth_method=grant` and `grant_expires_at` (Unix seconds). Ensure expiry covers the event.
+Create the event/session and load vocabulary before disconnecting; those operations
+still verify parent-event ownership through Firestore.
+
+`AUTH_GRANT_ENABLED=true` and `AUTH_GRANT_TTL_HOURS=12` are defaults (TTL bounds 1-24).
+Leave `AUTH_GRANT_SIGNING_KEY` empty to generate/reuse `DATA_DIR/grant_signing.key`.
+Preserve DATA_DIR across restarts and container recreation, protect directory permissions
+and backups, and never distribute the key. An externally supplied signing key must have
+at least 32 characters and stays in private configuration. No Firebase certificate cache
+or internet is needed to verify an existing grant after laptop restart.
+
+Set your own uid/verified email allowlist before using key rotation. Revoke a grant with
+POST `/api/v1/auth/grant/revoke` and JSON `{grant_id}` (omit the body to revoke the calling
+grant). POST `/api/v1/auth/grants/rotate-key` invalidates all grants backed by the file key.
+For an environment-managed key the API returns `feature_disabled`; change the private
+configuration externally and restart. Firebase sign-in is needed to issue replacement grants.
+
+Renew online with a fresh Firebase ID token when less than two hours remain. If a grant
+expires offline, show "Reconnect to the internet to renew sign-in". Disabling grants or
+changing the key invalidates grant access; Firebase account revocation alone is not seen
+until expiry. Loaded local transcription with `WHISPER_LOCAL_FILES_ONLY=true` needs no internet.
 
 ## Whisper models and offline preparation
 

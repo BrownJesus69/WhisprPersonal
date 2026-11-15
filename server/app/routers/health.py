@@ -10,6 +10,7 @@ from app.schemas.health import (
     AuthInfo,
     FeaturesInfo,
     FirebaseInfo,
+    GrantsInfo,
     HealthResponse,
     ModelInfo,
     ProviderInfo,
@@ -76,6 +77,9 @@ def build_health(request: Request) -> HealthResponse:
             else "disabled",
             allowlist_enabled=bool(settings.auth_allowed_uids or settings.auth_allowed_emails),
             check_revoked=settings.firebase_check_revoked,
+            grants=GrantsInfo(
+                enabled=settings.auth_grant_enabled, ttl_hours=settings.auth_grant_ttl_hours
+            ),
         ),
         features=FeaturesInfo(
             **{name: getattr(settings, f"feature_{name}") for name in FeaturesInfo.model_fields}

@@ -9,7 +9,7 @@ from app.core.errors import AppError, ErrorCode
 from app.models.ids import DocId
 from app.routers.sessions import User
 from app.schemas.vocabulary import VocabularyIn
-from app.security.ownership import require_event_owner, require_owner
+from app.security.ownership import check_event_owner_offline_tolerant, require_owner
 from app.services.store import utc_now
 
 router = APIRouter(prefix="/api/v1/vocabulary")
@@ -18,7 +18,10 @@ router = APIRouter(prefix="/api/v1/vocabulary")
 @router.post("")
 async def save(body: VocabularyIn, request: Request, user: User) -> dict[str, Any]:
     state = request.app.state
-    await require_event_owner(body.event_id, user, state.event_repository)
+    # Local-only data: allowed offline for unverified events; known other owner -> 404.
+    await check_event_owner_offline_tolerant(
+        body.event_id, user, state.event_repository, state.store
+    )
     if len(body.terms) > state.settings.vocabulary_max_terms:
         raise AppError(ErrorCode.validation_error, "Too many vocabulary terms.")
     replacements = [item.model_dump(by_alias=True) for item in body.replacements]
@@ -34,7 +37,7 @@ async def save(body: VocabularyIn, request: Request, user: User) -> dict[str, An
 @router.get("")
 async def get(event_id: DocId, request: Request, user: User) -> dict[str, Any]:
     state = request.app.state
-    await require_event_owner(event_id, user, state.event_repository)
+    await check_event_owner_offline_tolerant(event_id, user, state.event_repository, state.store)
     rows = await state.store.rows("SELECT * FROM vocabulary WHERE event_id=?", (event_id,))
     if not rows:
         return {"event_id": event_id, "terms": [], "replacements": []}

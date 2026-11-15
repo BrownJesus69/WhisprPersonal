@@ -25,7 +25,7 @@ from app.schemas.sessions import (
     SessionOut,
 )
 from app.security.auth import VerifiedUser
-from app.security.ownership import require_event_owner, require_owner
+from app.security.ownership import check_event_owner_offline_tolerant, require_owner
 from app.security.rate_limit import authenticated_user
 from app.services.language import LanguageTracker
 from app.services.store import event_in, insert, update, utc_now
@@ -120,7 +120,12 @@ async def create(body: SessionCreate, request: Request, user: User) -> JSONRespo
             return JSONResponse(
                 (await session_out(state, body.session_id)).model_dump(mode="json"), status_code=200
             )
-        await require_event_owner(body.event_id, user, state.event_repository)
+        # Offline events: a session may start while Firestore is unreachable. If this laptop has
+        # never verified the event, the session stays local (no Firestore writes) until the
+        # worker verifies ownership online; a mismatch then quarantines it.
+        verified = await check_event_owner_offline_tolerant(
+            body.event_id, user, state.event_repository, state.store
+        )
         now = utc_now()
         session = {
             "id": body.session_id,
@@ -135,6 +140,7 @@ async def create(body: SessionCreate, request: Request, user: User) -> JSONRespo
             "overlap_ms": body.overlap_ms,
             "tracker_state": json.dumps(LanguageTracker(settings, mode, expected).to_state()),
             "firestore_sync": "pending" if state.firestore_sync.enabled else "disabled",
+            "ownership_pending": 0 if verified else 1,
             "created_at": now,
             "updated_at": now,
         }

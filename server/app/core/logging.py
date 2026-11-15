@@ -19,6 +19,7 @@ class RedactingFilter(logging.Filter):
         self.secrets = tuple(value for value in secrets if value)
 
     def redact(self, value: str) -> str:
+        value = re.sub(r"wpg1\.[A-Za-z0-9_.-]+", "[REDACTED]", value)
         for secret in self.secrets:
             value = value.replace(secret, "[REDACTED]")
         value = re.sub(r"Bearer\s+[^\s\"',;]+", "Bearer [REDACTED]", value, flags=re.I)

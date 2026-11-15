@@ -35,10 +35,29 @@ class DisabledTokenVerifier:
 
 
 async def get_current_user(request: Request) -> VerifiedUser:
+    token = bearer_token(request)
+    if token.startswith("wpg1."):
+        if not request.app.state.settings.auth_grant_enabled:
+            raise AppError(ErrorCode.auth_not_configured, "Offline grants are disabled.")
+        return await request.app.state.grant_verifier.verify(token)
+    return await request.app.state.token_verifier.verify(token)
+
+
+def bearer_token(request: Request) -> str:
     parts = request.headers.get("Authorization", "").split()
     if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1]:
         raise AppError(ErrorCode.missing_auth_token, "A Bearer token is required.")
-    return await request.app.state.token_verifier.verify(parts[1])
+    return parts[1]
+
+
+async def require_firebase_auth(request: Request) -> VerifiedUser:
+    await require_server_key(request)
+    token = bearer_token(request)
+    if token.startswith("wpg1."):
+        raise AppError(
+            ErrorCode.invalid_auth_token, "A Firebase sign-in is required to issue a grant."
+        )
+    return await request.app.state.token_verifier.verify(token)
 
 
 async def require_auth(request: Request) -> VerifiedUser:
