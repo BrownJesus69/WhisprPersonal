@@ -16,3 +16,4 @@ select = ["E", "F", "I", "B", "UP", "S", "ASYNC"]
 
 [tool.pytest.ini_options]
 testpaths = ["app/tests"]
+markers = ["gpu: opt-in local real Whisper GPU test (no downloads)"]

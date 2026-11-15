@@ -14,6 +14,9 @@ def test_limits(make_settings: Any) -> None:
     async def body(request: Request) -> dict[str, int]:
         return {"size": len(await request.body())}
 
+    # Exercise middleware in isolation before the included Phase 3 session router.
+    app.router.routes[:] = app.router.routes[-2:] + app.router.routes[:-2]
+
     with TestClient(app, client=("127.0.0.1", 1)) as client:
         response = client.post("/body", content=b"x" * 20)
         assert response.status_code == 413

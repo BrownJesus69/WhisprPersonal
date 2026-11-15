@@ -63,6 +63,7 @@ def make_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
             "models_dir": tmp_path / "models",
             "data_dir": tmp_path / "data",
             "gpu_detection": "off",
+            "whisper_preload": False,
             "server_shared_secret": secrets.token_urlsafe(36),
             "groq_api_key": None,
             "sambanova_api_key": None,
@@ -107,3 +108,21 @@ class FakeFirebaseService:
 @pytest.fixture
 def fake_firebase() -> FakeFirebaseService:
     return FakeFirebaseService()
+
+
+@pytest.fixture
+def phase3_client(settings: Settings) -> Iterator[TestClient]:
+    from app.tests.fakes import FakeEngine, FakeEventRepo, FakeFirestoreSync
+
+    app = create_app(settings, token_verifier=FakeTokenVerifier())
+    with TestClient(app, client=("127.0.0.1", 50000)) as client:
+        client.headers.update(
+            {
+                "X-WhisprPersonal-Server-Key": settings.server_shared_secret.get_secret_value(),
+                "Authorization": "Bearer good-token",
+            }
+        )
+        app.state.event_repository = FakeEventRepo()
+        app.state.engine = app.state.worker.engine = FakeEngine()
+        app.state.firestore_sync = app.state.worker.sync = FakeFirestoreSync()
+        yield client

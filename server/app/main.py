@@ -1,4 +1,4 @@
-"""Application factory with local Firebase initialization; inference arrives in Phase 3."""
+"""Application factory with app-owned auth, durable queue and serialized inference."""
 
 import asyncio
 import logging
@@ -14,7 +14,7 @@ from app.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.request_context import RequestContextMiddleware
-from app.routers import auth, diagnostics, health
+from app.routers import auth, diagnostics, health, sessions, stream, vocabulary
 from app.security.auth import DisabledTokenVerifier, TokenVerifier
 from app.security.body_limit import BodyLimitMiddleware
 from app.security.firebase_verifier import FirebaseTokenVerifier
@@ -22,9 +22,15 @@ from app.security.headers import SecurityHeadersMiddleware
 from app.security.network import NetworkMiddleware
 from app.security.ownership import DisabledEventRepository, FirestoreEventRepository
 from app.security.rate_limit import RateLimitMiddleware, TokenBucketLimiter
+from app.services.broadcaster import Broadcaster
 from app.services.firebase import FirebaseService
+from app.services.firestore_sync import DisabledFirestoreSync, FirestoreSync
 from app.services.gpu import detect_gpu
+from app.services.model_manager import ModelManager
 from app.services.state import ServerState
+from app.services.store import Store
+from app.services.transcription import FasterWhisperEngine
+from app.workers.transcription_worker import TranscriptionWorker
 
 
 def create_app(
@@ -76,9 +82,31 @@ def create_app(
         app.state.global_limiter = TokenBucketLimiter(settings.rate_limit_global_per_minute)
         app.state.ip_limiter = TokenBucketLimiter(settings.rate_limit_per_ip_per_minute)
         app.state.user_limiter = TokenBucketLimiter(settings.rate_limit_per_user_per_minute)
+        app.state.store = Store(settings.data_dir)
+        await app.state.store.open()
+        app.state.broadcaster = Broadcaster()
+        app.state.model_manager = ModelManager(settings, app.state.server_state)
+        app.state.engine = FasterWhisperEngine(app.state.model_manager, settings)
+        app.state.firestore_sync = (
+            FirestoreSync(service, settings.firestore_timeout_s)
+            if service.status == "ready"
+            else DisabledFirestoreSync()
+        )
+        app.state.worker = TranscriptionWorker(
+            settings,
+            app.state.store,
+            app.state.engine,
+            app.state.model_manager,
+            app.state.broadcaster,
+            app.state.firestore_sync,
+            app.state.server_state,
+        )
+        await app.state.worker.start()
         try:
             yield
         finally:
+            await app.state.worker.stop()
+            await app.state.store.close()
             await asyncio.to_thread(service.close)
             logger.info("Server stopping", extra={"event": "shutdown"})
 
@@ -94,6 +122,9 @@ def create_app(
     app.include_router(auth.router)
     app.include_router(health.router)
     app.include_router(diagnostics.router)
+    app.include_router(sessions.router)
+    app.include_router(stream.router)
+    app.include_router(vocabulary.router)
     # add_middleware prepends: register from innermost to outermost.
     if settings.cors_allowed_origins:
         app.add_middleware(

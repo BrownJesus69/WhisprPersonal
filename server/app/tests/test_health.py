@@ -14,7 +14,7 @@ def test_health_schema(client: TestClient) -> None:
     health = HealthResponse.model_validate(response.json())
     assert health.status == "degraded"
     assert health.model.status == "not_loaded"
-    assert health.queue.status == "not_started"
+    assert health.queue.status == "running"
     assert health.uptime_s >= 0
     assert all(p["status"] == "not_configured" for p in health.providers.model_dump().values())
     assert response.headers["x-content-type-options"] == "nosniff"
@@ -58,3 +58,20 @@ def test_firebase_ready(make_settings: Any, fake_firebase: Any) -> None:
     assert response.json()["auth"]["check_revoked"] is True
     assert "testuser" not in response.text
     assert fake_firebase.project_id not in response.text
+
+
+def test_no_env_no_firebase_preload_disabled(make_settings: Any) -> None:
+    settings = make_settings(
+        server_shared_secret=None, whisper_preload=False, firebase_credentials_path=None
+    )
+    with TestClient(create_app(settings), client=("127.0.0.1", 1)) as client:
+        response = client.get("/health")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["queue"]["status"] == "running"
+        assert body["model"]["status"] == "not_loaded"
+        assert body["languages"] == {"supported": ["kn", "ta", "hi", "en"], "default_mode": "auto"}
+        assert (
+            client.post("/api/v1/sessions", json={"session_id": "s", "event_id": "e"}).status_code
+            == 503
+        )

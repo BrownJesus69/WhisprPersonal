@@ -15,6 +15,11 @@ from app.schemas.common import ErrorBody, ErrorResponse
 
 
 class ErrorCode(StrEnum):
+    chunk_conflict = "chunk_conflict"
+    session_finalized = "session_finalized"
+    session_busy = "session_busy"
+    unsupported_media_type = "unsupported_media_type"
+    checksum_mismatch = "checksum_mismatch"
     bad_request = "bad_request"
     validation_error = "validation_error"
     not_found = "not_found"
@@ -41,6 +46,11 @@ class ErrorCode(StrEnum):
 
 
 ERROR_STATUSES: dict[ErrorCode, int] = {
+    ErrorCode.chunk_conflict: 409,
+    ErrorCode.session_finalized: 409,
+    ErrorCode.session_busy: 409,
+    ErrorCode.unsupported_media_type: 415,
+    ErrorCode.checksum_mismatch: 422,
     ErrorCode.bad_request: 400,
     ErrorCode.validation_error: 422,
     ErrorCode.not_found: 404,

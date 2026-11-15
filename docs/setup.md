@@ -5,8 +5,8 @@ or Docker Desktop with Compose v2. Windows launchers support Windows PowerShell 
 Linux/macOS launchers need Bash and curl, plus Python 3 or OpenSSL for secret generation.
 Windows Docker Desktop must use Linux containers. NVIDIA GPU use additionally requires
 a compatible driver and NVIDIA container support; the base Compose file needs no GPU.
-Firebase Admin is included in the server dependencies. Startup needs no network connection,
-Whisper model, or configured remote provider. Firebase credentials are optional.
+Firebase Admin is included in the server dependencies. With `WHISPER_PRELOAD=false`, startup needs no model or network connection.
+With preload enabled (the default), startup downloads a missing model unless local-only mode is set. Firebase credentials are optional.
 
 ## Docker quick start
 
@@ -22,7 +22,7 @@ does not open it. The server reads that service account locally during Firebase 
 The root `.env` is never used by the launchers.
 
 The script creates models/data directories, selects the NVIDIA override when supported,
-builds and starts the service, polls health for up to 180 seconds, runs selftest, prints LAN
+builds and starts the service, polls health for up to 180 seconds, waits up to 20 minutes for model readiness, runs selftest, prints LAN
 and Tailscale URLs, prints a LAN QR, and opens docs. Windows prefers a DHCP LAN address and
 excludes virtual/Tailscale adapters; Linux uses `hostname -I` and macOS uses `en0`. On Linux,
 check the printed address if multiple physical/virtual interfaces exist. The QR contains
@@ -45,7 +45,7 @@ To validate before a server `.env` exists, add `--no-env-resolution --env-file .
 configuration in shared logs because it can expose secrets.
 
 The container runs as uid/gid 10001. On Linux, ensure host `models/` and `data/` bind mounts
-are writable by that uid before Phase 3. The read-only secret mount must be readable by
+are writable by that uid. The read-only secret mount must be readable by
 the container user when Firebase integration arrives. The Docker image's directory
 ownership does not override permissions on host bind mounts.
 
@@ -69,7 +69,9 @@ generate one with `python -m app.cli gen-secret`. Never put credentials into com
 URLs you share. Diagnostics require a configured Firebase service and a valid ID token.
 
 Visit `/health` and `/docs`, then run `python -m app.cli selftest` from the same environment.
-Expect HTTP 200, `degraded`, `not_loaded`, `not_started`. This is intentional. GPU probing
+With `WHISPER_PRELOAD=false`, expect HTTP 200, `degraded`, `not_loaded`, `running`.
+With the default preload, model status progresses through `loading` to `ready` or a safe
+`error` code; overall health becomes `ok` when the model is ready and the queue is running. GPU probing
 is best effort and never blocks core startup on a missing driver/tool. Use
 `GPU_DETECTION=off` to disable it. Selftest reports validity and reachability, not model
 readiness. API docs can be disabled without affecting health.
@@ -111,14 +113,14 @@ remain `not_configured`; configured providers report `configured_unchecked` with
 | SAMBANOVA_MAX_RPM | empty | Optional positive account-specific limit; no quota assumed |
 | LOCAL_LLM_BASE_URL | empty | Optional local endpoint |
 | LOCAL_LLM_MODEL | empty | Both local URL and model required for configured=true |
-| WHISPER_MODEL | large-v3-turbo | Planned primary transcription model; empty example uses default |
-| WHISPER_FALLBACK_MODEL | large-v3 | Planned fallback; empty example uses default |
+| WHISPER_MODEL | large-v3-turbo | Primary transcription model; empty example uses default |
+| WHISPER_FALLBACK_MODEL | large-v3 | Accurate profile; empty example uses default |
 | WHISPER_DEVICE | auto | auto, cuda or cpu; preference, not detected device |
-| WHISPER_COMPUTE_TYPE | float16 | Planned inference compute type |
+| WHISPER_COMPUTE_TYPE | float16 | Inference compute type; CPU float16/bfloat16 resolves to int8 |
 | MODELS_DIR | ./models | Docker overrides to /models |
 | DATA_DIR | ./data | Docker overrides to /data |
-| QUEUE_MAX_DEPTH | 500 | Planned bounded queue capacity |
-| WORKER_COUNT | 1 | Planned queue workers; Uvicorn stays single process |
+| QUEUE_MAX_DEPTH | 500 | Durable queue capacity |
+| WORKER_COUNT | 1 | Exactly one queue worker; Uvicorn stays single process |
 | MAX_CHUNK_UPLOAD_BYTES | 8388608 | Exact session/chunks path ceiling including multipart overhead |
 | MAX_JSON_BODY_BYTES | 1048576 | All other HTTP body ceiling |
 | RATE_LIMIT_GLOBAL_PER_MINUTE | 1200 | Global token bucket rate and burst |
@@ -175,7 +177,7 @@ Check the server `.env` values without sharing them, bind/port, network allowlis
 permissions and Docker status. An invalid secret/CIDR/origin causes configuration failure;
 an unset secret permits health but protected routes fail closed. `not_configured` Firebase and
 disabled token verification are expected without credentials;
-unloaded models remain expected until Phase 3.
+an unloaded model is expected only when preload is disabled.
 
 
 ## Firebase identity and Firestore
@@ -203,5 +205,48 @@ then set `AUTH_ALLOWED_UIDS` to your own uid and restart. Uids must be alphanume
 characters. Alternatively, `AUTH_ALLOWED_EMAILS` matches only verified email claims. When
 either list is set, a match in either list grants access. Diagnostics show counts only.
 `FIREBASE_CHECK_REVOKED=true` checks revoked/disabled accounts with an extra network call
-on every protected request; the default is false. See the offline constraint in
+on every protected request; the default is false. See the accepted sign-in limitation in
 [security.md](security.md) before planning events without internet.
+
+
+## Accepted limitation (2026-11-15)
+
+The owner accepted that events require internet access for Firebase sign-in. ID tokens
+expire after one hour; Admin SDK signing certificates are cached only in memory.
+Before recording, confirm hotspot/Wi-Fi internet and sign in on the phone within the hour.
+Loaded local transcription with `WHISPER_LOCAL_FILES_ONLY=true` needs no internet.
+
+## Whisper models and offline preparation
+
+Run `python -m app.cli download-models` from `server/` while internet is available.
+Add `--fallback` to also cache the accurate `large-v3` model. The command prints downloaded
+sizes and uses the same `MODELS_DIR` cache as inference. Then set
+`WHISPER_LOCAL_FILES_ONLY=true` in your private configuration. Restart and wait for
+`/health` model.status=`ready` before going to an event. Launchers wait for readiness,
+print loading progress every 10 seconds, and stop on model error or a 20-minute timeout.
+`WHISPER_PRELOAD=false` provides liveness-only development without downloading models;
+chunks remain queued until a model is ready.
+
+The default turbo alias resolves to `mobiuslabsgmbh/faster-whisper-large-v3-turbo`;
+accurate resolves to `Systran/faster-whisper-large-v3`. One executor serializes inference.
+Auto device selects CUDA when available, otherwise CPU. CPU changes float16/bfloat16 to
+int8 and logs that decision. `WHISPER_MAX_LOADED_MODELS=1` evicts the least recently used
+model before loading the other profile; set 2 only with sufficient memory.
+
+On Windows, optional runtime wheels are pinned in `requirements-windows-gpu.txt`.
+The server adds NVIDIA wheel bin directories to both the DLL loader and PATH before
+native imports. Docker uses system CUDA libraries. Keep `av==17.0.0`: av 19 removed the
+metadata_errors argument used by the pinned faster-whisper decoder.
+
+All Phase 3 configuration and comments are in [the public environment example](../server/.env.example).
+Supported languages default to `kn,ta,hi,en`; extend `SUPPORTED_LANGUAGES` with valid
+Whisper codes (for example te,ml,mr,bn,gu,pa). Sessions can restrict expected languages or
+force a code; low confidence and out-of-set detections are flagged as uncertain.
+Language window, lock and switch settings control hysteresis, not an accuracy guarantee.
+Chunk duration defaults to 30 seconds plus declared overlap (maximum 3000 ms), with three
+attempts and exponential jittered backoff. Shutdown drains for 20 seconds, below Compose's
+30-second grace period. Queue limits, upload limits and retention apply independently.
+
+Run offline tests with `.venv/Scripts/python -m pytest -q -p no:cacheprovider`.
+The real GPU smoke test remains skipped unless `WHISPR_RUN_GPU_TESTS=1` and turbo files
+already exist in server/models. It retains the no_network fixture and never downloads.

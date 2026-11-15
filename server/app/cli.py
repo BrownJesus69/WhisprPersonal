@@ -19,7 +19,34 @@ def main(argv: list[str] | None = None, *, transport: httpx.BaseTransport | None
     selftest.add_argument("--base-url", default="http://127.0.0.1:8000")
     selftest.add_argument("--timeout", type=float, default=5)
     commands.add_parser("gen-secret")
+    download = commands.add_parser("download-models")
+    download.add_argument("--fallback", action="store_true")
     args = parser.parse_args(argv)
+    if args.command == "download-models":
+        import os
+        from pathlib import Path
+
+        from app.config import get_settings
+        from app.services.cuda_windows import prepare_cuda_dlls
+
+        prepare_cuda_dlls()
+        os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+        from faster_whisper.utils import download_model
+
+        settings = get_settings()
+        names = [settings.whisper_model]
+        if args.fallback:
+            names.append(settings.whisper_fallback_model)
+        for name in names:
+            try:
+                directory = Path(download_model(name, cache_dir=str(settings.models_dir)))
+                size = sum(path.stat().st_size for path in directory.rglob("*") if path.is_file())
+                print(f"Downloaded {name}: {size / 1024**3:.2f} GiB")
+            except Exception:
+                print("FAIL: model download failed. Check internet access and disk space.")
+                return 1
+        print("Set WHISPER_LOCAL_FILES_ONLY=true for offline events.")
+        return 0
     if args.command == "gen-secret":
         print(secrets.token_urlsafe(48))
         return 0

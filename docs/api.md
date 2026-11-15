@@ -1,4 +1,4 @@
-# API reference - Phase 2
+# API reference - Phase 3
 
 Default base URL: `http://127.0.0.1:8000`. Interactive docs are at `/docs`, alternative docs
 at `/redoc`, and the schema at `/openapi.json` when `ENABLE_API_DOCS=true`. These surfaces
@@ -31,8 +31,8 @@ both model status is `ready` and queue status is `running`.
 | auth | `{shared_secret_configured: boolean, token_verification: disabled/firebase, allowlist_enabled: boolean, check_revoked: boolean}` |
 | features | boolean `translation`, `calendar`, `drive`, `gmail`, `app_check`, `fcm`, `web_search`, `cloud_whisper` |
 
-Typical startup values are `degraded`, `not_loaded`, `not_started`, and unconfigured
-providers. Configured providers are never contacted here. Names in the model object are
+With preload disabled, startup values are `degraded`, `not_loaded`, `running`, and
+unconfigured providers. Default preload loads turbo asynchronously. Configured providers are never contacted here. Names in the model object are
 the configured Whisper names, not a claim that model files exist. No secret or filesystem
 path is returned. Security headers include `nosniff`, `no-referrer`, and `no-store`.
 
@@ -105,17 +105,112 @@ overhead. Content-Length and streamed bytes are both enforced; if a response has
 started when a streaming overrun occurs, the connection terminates instead of sending a
 second response. CORS is absent by default; explicit origins are required when enabled.
 
-## Planned endpoints (not registered in Phase 2)
+## Sessions and chunk upload
 
-Route names below are provisional; later phases define their full contracts.
+All following HTTP routes require both auth headers and the per-user limit. Local session
+ownership returns 404 for both missing and other-owner resources. DocIds contain 1-128
+ASCII letters, digits, underscores or hyphens, excluding reserved __...__ IDs.
 
-| Endpoint / family | Status |
+| Route | Request and response |
 | --- | --- |
-| POST /api/v1/sessions/{session_id}/chunks | planned (Phase 3) |
-| Transcription queue/status and transcript delivery | planned (Phase 3) |
-| Android event/session workflows | planned (Phase 4+) |
-| Derived text / provider APIs | planned (Phase 8) |
-| App Check verification | planned (Phase 10) |
+| POST /api/v1/sessions | JSON session_id, event_id, language_mode=auto, expected_languages=[], model_profile=turbo, overlap_ms=0. Verifies parent event ownership in Firestore. New 201; same owner/event ID 200, otherwise 404. Returns SessionOut. |
+| POST /api/v1/sessions/{session_id}/chunks | Multipart fields below. New 202; exact duplicate 200; queue_full 503 with Retry-After: 10. |
+| GET /api/v1/sessions/{session_id} | after_sequence=-1, limit=500 (1-1000). Chunks ordered by sequence, selected after cursor. |
+| POST /api/v1/sessions/{session_id}/finalize | JSON expected_chunk_count (optional/null, 0-100001), force=false. 200 SessionOut when finalized, otherwise 202 {status: finalizing, missing_sequences, pending}. Idempotent. |
+| POST /api/v1/sessions/{session_id}/language | JSON {language: auto or configured code}; 200 current language state. Changes apply to future processing; already stored raw text stays unchanged. |
+| DELETE /api/v1/sessions/{session_id} | 200 {deleted: true, firestore_deleted: boolean}; 409 session_busy while processing. Closes subscribers and removes local audio/results; cloud deletion is best effort. |
 
-WebSocket identity and application protocols are planned. The network filter already
-rejects disallowed WebSocket peers with close code 1008 and sets a correlation context.
+Create example (identifiers are client generated):
+
+```json
+{"session_id":"session-1","event_id":"event-1","language_mode":"auto","expected_languages":["kn","en"],"model_profile":"turbo","overlap_ms":2000}
+```
+
+Chunk multipart fields: chunk_id (DocId), sequence (0-100000), start_ms (>=0), end_ms
+(>start_ms), overlap_ms (0-configured max), continues (boolean, default true), optional
+language (per-chunk forced configured code), optional sha256 (64 hex digits), and file.
+Declared duration may not exceed MAX_CHUNK_DURATION_S plus overlap. Extensions are checked
+against ALLOWED_AUDIO_EXTENSIONS (m4a,mp4,aac,3gp,wav,ogg,webm,flac,mp3 by default);
+actual decoding happens in the worker. All multipart overhead counts toward the upload limit.
+First/last chunks should accurately declare head overlap and continues=false on the last chunk.
+
+New response: {chunk_id, sequence, status: queued, duplicate: false, queue_depth}.
+Duplicate ID plus identical computed content hash returns {duplicate: true, status, chunk}
+without another queue entry. A different hash for that ID or another ID for the same sequence
+returns chunk_conflict. Client checksum mismatch returns checksum_mismatch. Finalized sessions
+reject uploads/overrides with session_finalized; finalizing sessions accept late backlog.
+
+SessionOut includes session_id, event_id, status (active/finalizing/finalized),
+transcript_status (pending/complete/partial), model_profile/name, language {mode, locked,
+segments: [{language, from_sequence, to_sequence}]}, counts {queued, processing, done, failed,
+total}, missing_sequences, chunks, transcript_text, last_event_seq and firestore_sync
+(pending/synced/failed/disabled). transcript_text joins all done chunk text in sequence order
+when after_sequence=-1; with a pagination cursor it is null. ChunkOut contains chunk_id,
+sequence, start_ms/end_ms, status, raw_text, segments [{start_ms,end_ms,text}],
+detected_language, language_confidence, language_source (override/auto/locked),
+language_uncertain, no_speech, and error_code. Segment times in final output are absolute ms.
+
+No-speech results contain empty text and a no_speech flag, without language detection.
+Confidence is nullable for forced language, otherwise reports the restricted renormalized
+probability. Uncertain is a warning for review, not an accuracy guarantee. Failed chunks retain
+audio and safe error codes: audio_decode_failed, chunk_too_long, transcription_failed.
+HTTP additions: chunk_conflict/session_finalized/session_busy 409, unsupported_media_type 415,
+checksum_mismatch 422. Finalizing emits session_finalizing, waits for all expected sequences
+and queued/processing work, then emits session_finalized. Force permits missing sequences;
+missing or failed sequences make transcript_status partial.
+
+## Event vocabulary
+
+POST /api/v1/vocabulary accepts {event_id, terms: [string <=64 chars],
+replacements: [{from, to}]}; GET /api/v1/vocabulary?event_id=... returns the same lists.
+Both verify event ownership. Terms are trimmed, empty values removed, and deduplicated;
+at most VOCABULARY_MAX_TERMS (default 200), joined as model hotwords capped at 400 characters.
+At most 200 replacements are stored. Replacements are applied only in the polished layer in
+Phase 8, never to raw text in this phase.
+
+## Resumable WebSocket
+
+Connect to /api/v1/sessions/{session_id}/stream?after_seq=0 with the same two HTTP auth
+headers. React Native supports new WebSocket(url, protocols, {headers}). Never put tokens
+in query parameters; query tokens are not authentication. The server accepts first, then
+checks key, token, allowlist, per-user rate and local ownership. On failure it sends
+{type: error, code, message} then closes: 4401 auth failure, 4403 account_not_allowed,
+4404 not found, 4429 rate limited, 4503 auth unavailable/not configured.
+
+Successful connections receive {type: hello, session_id, status, last_event_seq, server_time},
+then ordered persisted events with seq > after_seq, then live events. Save the last received
+persisted seq and reconnect with it. Subscription starts before replay; duplicates at the
+replay/live boundary are skipped. A subscriber queue overflow closes 4008: reconnect/resume.
+Deletion sends session_deleted then closes 1000. The network filter still rejects disallowed
+peers with 1008 before this protocol begins.
+
+Persisted envelope: {type, seq, session_id, ts, data}. Event types: session_created,
+chunk_queued, chunk_processing, transcript_final, transcript_revised, chunk_failed,
+language_locked, language_changed, language_override, session_finalizing, session_finalized,
+session_deleted.
+transcript_final.data includes chunk_id, sequence, start_ms, end_ms, raw_text, segments,
+detected_language, language_confidence, language_source, language_uncertain, no_speech.
+transcript_revised.data has the same shape and **replaces** that chunk's text. It is sent when a
+neighbouring chunk finishes and the overlap seam between them is re-stitched (e.g. a word that
+was cut by the chunk boundary is replaced by the neighbour's complete copy, or a word repeated in
+the overlap is removed). Clients render chunks keyed by `sequence` and apply the latest
+final/revised payload. Stitching never deletes a word unless the neighbour demonstrably has it.
+Overlap guidance: send 1000–1500 ms overlap (`overlap_ms` on every chunk after the first).
+The `continues` upload field is accepted for compatibility but no longer affects trimming.
+session_finalized.data includes transcript_status, missing_sequences, failed_sequences.
+
+Ephemeral envelope: {type: transcript_partial, session_id, chunk_id, sequence,
+data: {start_ms,end_ms,text}}. These segment times are relative to the chunk. Partials have
+no seq, are never persisted or written to Firestore, and may disappear on reconnect.
+Server ping every 20 seconds; client responds {type: pong}. Send {type: set_language,
+language: kn} or language: auto to use the same override as HTTP. Maximum inbound command
+is 4096 UTF-8 bytes. Invalid JSON/unknown commands yield an error and keep the socket open.
+
+## Model/queue diagnostics
+
+Health model adds loaded (model names), device_resolved (cuda/cpu/null), compute_type,
+load_s, and safe error (model_files_missing/cuda_unavailable/load_failed/null).
+languages is {supported: configured codes, default_mode: auto}. Overall status is ok only
+when model ready and queue running. Diagnostics adds chunk_counts by status,
+average_real_time_factor over the latest 50 done chunks (null when absent), and
+cuda_dll_dirs_added (count only). No audio paths, transcripts, credentials or DLL paths appear.

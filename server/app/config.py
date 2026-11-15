@@ -50,10 +50,35 @@ class Settings(BaseSettings):
     whisper_fallback_model: str = "large-v3"
     whisper_device: Literal["auto", "cuda", "cpu"] = "auto"
     whisper_compute_type: str = "float16"
+    whisper_beam_size: int = Field(5, ge=1, le=10)
+    whisper_local_files_only: bool = False
+    whisper_preload: bool = True
+    whisper_max_loaded_models: int = Field(1, ge=1, le=2)
+    supported_languages: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["kn", "ta", "hi", "en"]
+    )
+    language_detect_window_s: float = Field(15, ge=10, le=20)
+    language_lock_min_chunks: int = Field(2, ge=1)
+    language_lock_threshold: float = Field(0.6, ge=0, le=1)
+    language_uncertain_threshold: float = Field(0.5, ge=0, le=1)
+    language_switch_threshold: float = Field(0.8, ge=0, le=1)
+    language_switch_consecutive: int = Field(2, ge=1)
+    max_chunk_duration_s: int = Field(30, ge=1)
+    max_overlap_ms: int = Field(3000, ge=0)
+    chunk_max_attempts: int = Field(3, ge=1)
+    chunk_retry_base_s: float = Field(2, gt=0)
+    shutdown_drain_timeout_s: float = Field(20, gt=0, lt=30)
+    server_audio_retention: Literal["keep", "delete_on_finalize"] = "keep"
+    firestore_sync_retry_s: int = Field(60, ge=1)
+    firestore_timeout_s: float = Field(10, gt=0, le=120)
+    allowed_audio_extensions: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: "m4a,mp4,aac,3gp,wav,ogg,webm,flac,mp3".split(",")
+    )
+    vocabulary_max_terms: int = Field(200, ge=1)
     models_dir: Path = Field(Path("./models"), repr=False)
     data_dir: Path = Field(Path("./data"), repr=False)
     queue_max_depth: int = Field(500, gt=0)
-    worker_count: int = Field(1, gt=0)
+    worker_count: int = Field(1, ge=1, le=1)
     max_chunk_upload_bytes: int = Field(8_388_608, gt=0)
     max_json_body_bytes: int = Field(1_048_576, gt=0)
     rate_limit_global_per_minute: int = Field(1200, gt=0)
@@ -117,6 +142,8 @@ class Settings(BaseSettings):
         return value
 
     @field_validator(
+        "supported_languages",
+        "allowed_audio_extensions",
         "allowed_client_networks",
         "cors_allowed_origins",
         "auth_allowed_uids",
@@ -128,6 +155,22 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("supported_languages")
+    @classmethod
+    def valid_languages(cls, values: list[str]) -> list[str]:
+        # Import only the tokenizer constants, never initialize a model or probe CUDA.
+        from app.services.cuda_windows import prepare_cuda_dlls
+
+        cuda_dirs = prepare_cuda_dlls()
+        from faster_whisper.tokenizer import _LANGUAGE_CODES
+
+        del cuda_dirs  # ModelManager retains its own handles while models are in use.
+
+        values = list(dict.fromkeys(value.lower() for value in values))
+        if not values or any(value not in _LANGUAGE_CODES for value in values):
+            raise ValueError("Unsupported language configuration")
+        return values
 
     @field_validator("auth_allowed_uids")
     @classmethod

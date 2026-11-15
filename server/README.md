@@ -2,7 +2,8 @@
 
 FastAPI foundation for a single laptop inference process. Phase 1 implements health,
 protected diagnostics, typed settings, redacting logs, bounded HTTP middleware, local GPU
-probing, and operator CLI tools. Model loading and transcription arrive in Phase 3.
+probing, and operator CLI tools. Phase 2 adds Firebase identity; Phase 3 implements
+Whisper/VAD, SQLite chunk persistence, language tracking, resumable streams and final cloud sync.
 
 See [setup](../docs/setup.md) for Docker/non-Docker installation, all environment fields,
 and Private-profile firewall instructions. Run commands from this directory so `.env`
@@ -26,11 +27,17 @@ python -m app.cli gen-secret
 `selftest` exits 0 for reachable, schema-valid health even when degraded; failures exit 1.
 QR prints exactly the supplied URL and exits 2 if `@`, `?`, or `#` occurs. `gen-secret`
 prints a newly generated secret; store it privately. Diagnostics fail closed until a
-shared key and a Phase 2 verifier are configured. Tests inject a fake verifier and mocked
+shared key and a Firebase verifier are configured. Tests inject a fake verifier and mocked
 GPU/provider/HTTP seams, and prohibit external network access.
 
 Use `create_app(settings)` to inject settings in tests. `TokenVerifier` and `ServerState`
-are later-phase seams; no Firebase SDK or inference dependency is installed here.
+are injection seams. Firebase and Whisper dependencies are pinned; real services/models
+are replaced with offline fakes in normal tests.
 Keep one Uvicorn worker. Do not run the launchers during automated tests: they deliberately
 build containers, create a missing server `.env`, inspect credential filenames, and may
 open a browser. Compose's GPU override requests one NVIDIA device; the base file is CPU-safe.
+
+Pre-download models with `python -m app.cli download-models [--fallback]`, then set
+`WHISPER_LOCAL_FILES_ONLY=true`. Default preload loads turbo asynchronously; disable with
+`WHISPER_PRELOAD=false` for a liveness-only server. The GPU test is opt-in via
+`WHISPR_RUN_GPU_TESTS=1` and uses only the existing local model cache.

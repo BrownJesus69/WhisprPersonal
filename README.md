@@ -3,7 +3,7 @@
 WhisprPersonal is a planned Android event transcription app backed by a laptop inference
 server. Phase 1 provides the FastAPI foundation, local status checks, security boundaries,
 operator tools, and deployment scaffolding. Phase 2 adds Firebase authentication and ownership
-helpers. It does not transcribe audio yet.
+helpers. Phase 3 adds durable chunked Whisper transcription, resumable streams, and final Firestore sync.
 
 ```text
 Android app (Phase 4+) -- LAN / Tailscale --> Laptop FastAPI server
@@ -21,8 +21,8 @@ cd E:\Whispr\server
 ```
 
 Open <http://127.0.0.1:8000/health>. No `.env` is required. A running server
-returns HTTP 200 with `status: degraded`, `model.status: not_loaded`, and
-`queue.status: not_started`. In another terminal, run
+with `WHISPER_PRELOAD=false` returns HTTP 200 with `status: degraded`, `model.status: not_loaded`, and
+`queue.status: running`. In another terminal, run
 `python -m app.cli selftest` with the same environment. PASS means reachable and valid;
 it does not mean transcription is ready.
 
@@ -35,7 +35,7 @@ separately in the future app's Settings. See [setup](docs/setup.md) before LAN u
 | --- | --- |
 | 1 | Implemented: repository and server foundation |
 | 2 | Complete: Firebase identity, ownership helpers, Firestore rules and indexes |
-| 3 | Planned: Whisper, VAD, queue, transcription worker |
+| 3 | Implemented: Whisper/VAD, SQLite queue, language tracking, resumable WebSocket, final Firestore sync |
 | 4–7 | Planned: Android app and event workflows |
 | 8 | Planned: optional Groq/SambaNova integrations |
 | 9 | Planned: event operations runbook |
@@ -48,8 +48,7 @@ values and credential paths are excluded from health and diagnostics; logs are r
 Raw transcripts will remain unchanged unless cleanup is explicitly enabled.
 
 HTTP is not encrypted: use a trusted LAN or Tailscale, avoid Internet exposure, and keep
-the firewall limited to the Private profile. Transcription, persistent rate limits, and remote
-provider checks are not available yet. Run one server worker; limits and state are process
+the firewall limited to the Private profile. Persistent rate limits and remote provider checks are not available yet. Run one server worker; limits and state are process
 local. Future integration flags report intent only.
 
 Read [architecture](docs/architecture.md), [API](docs/api.md), [security](docs/security.md),

@@ -66,6 +66,25 @@ if ($null -eq $health) {
     & docker compose @composeFiles logs --tail 50 server
     exit 1
 }
+$deadline = (Get-Date).AddMinutes(20)
+while ($health.model.status -ne 'ready' -and (Get-Date) -lt $deadline) {
+    if ($health.model.status -eq 'error') {
+        Write-Host "Model error: $($health.model.error). Recent server logs:"
+        & docker compose @composeFiles logs --tail 50 server
+        exit 1
+    }
+    Write-Host 'Model loading...'
+    Start-Sleep -Seconds 10
+    try {
+        $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$port/health" -TimeoutSec 3
+        $health = $response.Content | ConvertFrom-Json
+    } catch { Write-Host 'Waiting for health...' }
+}
+if ($health.model.status -ne 'ready') {
+    Write-Host 'Model readiness timed out. Recent server logs:'
+    & docker compose @composeFiles logs --tail 50 server
+    exit 1
+}
 & docker compose @composeFiles exec -T server python -m app.cli selftest
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
@@ -86,5 +105,5 @@ if (Get-Command tailscale -ErrorAction SilentlyContinue) {
         Write-Host "Tailscale URL: http://$($tailscaleIp.Trim()):$port"
     }
 }
-Write-Host "Model: $($health.model.status); queue: $($health.queue.status). Model loading arrives in Phase 3."
+Write-Host "Model: $($health.model.status); queue: $($health.queue.status)."
 Start-Process "http://localhost:$port/docs"

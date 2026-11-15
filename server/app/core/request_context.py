@@ -26,6 +26,8 @@ class RequestContextMiddleware:
         request_id = candidate if re.fullmatch(r"[A-Za-z0-9-]{8,64}", candidate) else uuid4().hex
         scope.setdefault("state", {})["request_id"] = request_id
         token = request_id_var.set(request_id)
+        session_token = session_id_var.set(None)
+        chunk_token = chunk_id_var.set(None)
         started = time.perf_counter()
         status = 500
 
@@ -52,3 +54,5 @@ class RequestContextMiddleware:
                     },
                 )
             request_id_var.reset(token)
+            session_id_var.reset(session_token)
+            chunk_id_var.reset(chunk_token)

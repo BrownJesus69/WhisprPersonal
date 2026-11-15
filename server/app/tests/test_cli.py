@@ -45,3 +45,27 @@ def test_docs_disabled(make_settings: Any) -> None:
     ) as client:
         assert client.get("/docs").status_code == 404
         assert client.get("/openapi.json").status_code == 404
+
+
+def test_download_models_offline_fake(
+    make_settings: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import faster_whisper.utils
+
+    from app import config
+
+    settings = make_settings()
+    monkeypatch.setattr(config, "get_settings", lambda: settings)
+    settings.models_dir.mkdir()
+    (settings.models_dir / "model.bin").write_bytes(b"fake")
+    calls = []
+
+    def download(name: str, cache_dir: str) -> str:
+        calls.append((name, cache_dir))
+        return cache_dir
+
+    monkeypatch.setattr(faster_whisper.utils, "download_model", download)
+    assert main(["download-models", "--fallback"]) == 0
+    assert [name for name, _ in calls] == ["large-v3-turbo", "large-v3"]
+    assert all(root == str(settings.models_dir) for _, root in calls)
+    assert "WHISPER_LOCAL_FILES_ONLY=true" in capsys.readouterr().out

@@ -50,3 +50,16 @@ def test_exception_extra_redaction() -> None:
         }
     )
     assert "sensitive-header-value" not in formatter.format(record)
+
+
+def test_exception_never_logs_paths_or_transcript() -> None:
+    import sys
+
+    formatter = StructuredFormatter(RedactingFilter())
+    try:
+        raise RuntimeError("private transcript at E:/private/audio.m4a")
+    except RuntimeError:
+        record = logging.makeLogRecord({"msg": "Operation failed", "exc_info": sys.exc_info()})
+    output = formatter.format(record)
+    assert "private transcript" not in output and "E:/private" not in output
+    assert "traceback" not in output and "RuntimeError" in output

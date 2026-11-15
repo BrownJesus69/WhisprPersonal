@@ -56,6 +56,24 @@ if [[ $health_ready != true ]]; then
   docker compose "${compose_files[@]}" logs --tail 50 server
   exit 1
 fi
+deadline=$((SECONDS + 1200))
+model_ready=false
+while (( SECONDS < deadline )); do
+  model_state=$(docker compose "${compose_files[@]}" exec -T server python -c \
+    'import json,urllib.request; m=json.load(urllib.request.urlopen("http://127.0.0.1:8000/health",timeout=3))["model"]; print(m["status"]); print(m.get("error") or "")' || true)
+  case "$model_state" in
+    ready*) model_ready=true; break ;;
+    error*) echo "Model error: $model_state" >&2
+      docker compose "${compose_files[@]}" logs --tail 50 server; exit 1 ;;
+  esac
+  echo 'Model loading...'
+  sleep 10
+done
+if [[ $model_ready != true ]]; then
+  echo 'Model readiness timed out.' >&2
+  docker compose "${compose_files[@]}" logs --tail 50 server
+  exit 1
+fi
 docker compose "${compose_files[@]}" exec -T server python -m app.cli selftest
 lan_ips=''
 if [[ $(uname -s) == Darwin ]]; then
@@ -80,7 +98,6 @@ if command -v tailscale >/dev/null; then
 fi
 docker compose "${compose_files[@]}" exec -T server python -c \
   'import json,urllib.request; h=json.load(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5)); print("Model: "+h["model"]["status"]+"; queue: "+h["queue"]["status"])'
-echo 'Model loading arrives in Phase 3.'
 if command -v xdg-open >/dev/null; then
   xdg-open "http://localhost:$port/docs" >/dev/null 2>&1 || true
 elif command -v open >/dev/null; then

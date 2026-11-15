@@ -57,7 +57,7 @@ The non-root container drops capabilities and uses no-new-privileges. Host bind 
 still require appropriate permissions and private backups.
 
 HTTP provides no transport confidentiality. Avoid port forwarding or public exposure.
-Use a trusted Private network or Tailscale and a scoped host firewall. TLS, App Check, retention/deletion, backup encryption,
+Use a trusted Private network or Tailscale and a scoped host firewall. TLS, App Check, backup encryption,
 provider request security, and transcription isolation remain later-phase work. Raw
 transcripts must never be modified by an LLM unless cleanup is explicitly enabled.
 
@@ -85,8 +85,8 @@ Revocation checking defaults off; enabling it adds a network call per protected 
 The Admin SDK bypasses Firestore rules, so `security/ownership.py` enforces parent-event
 ownership itself. Missing events and events owned by another user both return the same
 404 `not_found`, preventing existence leaks. Identifier validation runs before database
-access. Firestore failures map to 503 without document data in logs. These helpers are
-provided for Phase 3; no session or transcription endpoints are introduced here.
+access. Firestore failures map to 503 without document data in logs. Sessions enforce ownership against local SQLite owner_uid; creating a session and
+reading/writing vocabulary also verify the parent event through Firestore.
 
 Client rules restrict users to their own profile and events to the owner. Event ownerId
 is immutable; event writes validate title and status/privacy enums. Sessions, notes, briefs
@@ -95,9 +95,33 @@ Chunk text is limited to 20,000 characters per raw/polished field. Writes reject
 fields (`apiKey`, `serverKey`, `privateKey`, `secret`, `token`). Unmatched paths are denied.
 Event list queries must constrain `ownerId` to the authenticated uid; rules are not filters.
 
-## Known constraint
+## Accepted limitation (2026-11-15)
 
 Firebase ID tokens expire after 1 hour and can only be refreshed with internet access; the
 Admin SDK caches Google's signing certificates in memory only. Without internet, the laptop
 can verify tokens only while the phone's current token is valid AND the server has fetched
-certs since its last restart. Fully offline events need a separate design decision.
+certs since its last restart. The owner accepted that events require internet access for sign-in on 2026-11-15.
+Transcription itself needs no internet after model download with
+`WHISPER_LOCAL_FILES_ONLY=true`. Confirm hotspot/Wi-Fi internet and sign in on the phone
+within the hour before recording.
+
+
+## Phase 3 local storage and streams
+
+SQLite stores raw transcript text and vocabulary locally under DATA_DIR; protect the disk
+and backups. The audit log records IDs, safe codes, model, duration and real-time factor,
+never audio or transcript text. Audio defaults to keep; delete_on_finalize removes audio
+only after the session has finalized. Failed chunks keep audio for investigation/retry.
+Explicit session deletion cascades local rows/audio, rejects processing sessions, closes
+subscribers and attempts deletion of cloud chunks and metadata. Cloud deletion failures
+are reported separately and need operator follow-up.
+
+Uploads validate DocIds before building paths, cap streamed bytes, hash content and use
+atomic renames. Duplicate uploads never requeue completed work. Decode is isolated from the
+event loop in the single inference executor; extension allowlisting does not claim the
+content is decodable. Midpoint overlap trimming operates only on raw word timestamps.
+No LLM calls or vocabulary replacements modify raw text. Partial text travels only over
+authenticated WebSockets and is not stored in replay events or Firestore. Final chunk text
+is synchronized to Firestore only on session finalization. SQLite remains authoritative
+when the cloud is unavailable. WebSockets accept credentials only in headers, enforce
+local ownership and bounded subscriber queues, and close overflowed clients for replay.

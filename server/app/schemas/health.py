@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class GpuInfo(BaseModel):
@@ -18,6 +18,11 @@ class ModelInfo(BaseModel):
     fallback_name: str
     status: Literal["not_loaded", "loading", "ready", "error"]
     device: Literal["auto", "cuda", "cpu"]
+    loaded: list[str] = Field(default_factory=list)
+    device_resolved: Literal["cuda", "cpu"] | None = None
+    compute_type: str | None = None
+    load_s: float | None = None
+    error: str | None = None
 
 
 class QueueInfo(BaseModel):
@@ -76,3 +81,6 @@ class HealthResponse(BaseModel):
     firebase: FirebaseInfo
     auth: AuthInfo
     features: FeaturesInfo
+    languages: dict[str, list[str] | str] = Field(
+        default_factory=lambda: {"supported": [], "default_mode": "auto"}
+    )

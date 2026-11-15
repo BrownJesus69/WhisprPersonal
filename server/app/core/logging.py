@@ -66,7 +66,8 @@ class StructuredFormatter(logging.Formatter):
                 payload[name] = var.get()
         if record.exc_info:
             payload["exc_type"] = record.exc_info[0].__name__ if record.exc_info[0] else None
-            payload["traceback"] = self.formatException(record.exc_info)
+            # Exceptions may contain audio paths, transcript content or SDK credentials.
+            # Keep the exception type, never its message or stack.
 
         # Redact before JSON encoding so multiline PEM blocks remain recognizable.
         def clean(value: Any) -> Any:
@@ -101,6 +102,9 @@ def configure_logging(settings: Settings) -> None:
     root.setLevel(settings.log_level.upper())
     # Uvicorn's own access log includes query strings. Use our safe access line instead.
     logging.getLogger("uvicorn.access").disabled = True
+    # Inference library warnings may include local model paths or decoder data.
+    # Our engine reports only safe codes, timings and IDs instead.
+    logging.getLogger("faster_whisper").disabled = True
     for name in ("uvicorn", "uvicorn.error"):
         logger = logging.getLogger(name)
         logger.handlers = []

@@ -6,3 +6,8 @@ httpx==0.28.1
 python-multipart==0.0.33
 qrcode==8.2
 firebase-admin==7.8.0
+faster-whisper==1.2.1
+ctranslate2==4.9.0
+# av 19 removed metadata_errors, which faster_whisper.decode_audio still passes.
+av==17.0.0
+numpy==2.5.4
