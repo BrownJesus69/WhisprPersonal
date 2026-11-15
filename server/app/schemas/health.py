@@ -34,7 +34,11 @@ class QueueInfo(BaseModel):
 
 class ProviderInfo(BaseModel):
     configured: bool
-    status: Literal["not_configured", "configured_unchecked"]
+    status: Literal[
+        "not_configured", "configured_unchecked", "ready", "degraded", "circuit_open", "auth_failed"
+    ]
+    model: str | None = None
+    last_error_kind: str | None = None
 
 
 class ProvidersInfo(BaseModel):

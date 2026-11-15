@@ -1,10 +1,12 @@
 """Environment configuration; no credentials are opened or initialized here."""
 
 import re
+import sys
 from functools import lru_cache
-from ipaddress import ip_network
+from ipaddress import ip_address, ip_network
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -49,6 +51,26 @@ class Settings(BaseSettings):
     sambanova_max_rpm: int | None = Field(None, gt=0)
     local_llm_base_url: str | None = Field(None, repr=False)
     local_llm_model: str | None = None
+    local_llm_api_key: SecretStr | None = Field(None, repr=False)
+    local_llm_timeout_s: float = Field(30, gt=0)
+    local_llm_max_concurrency: int = Field(2, gt=0)
+    local_llm_max_rpm: int | None = Field(None, gt=0)
+    # Laptop safety budgets, never provider quotas.
+    ai_max_input_chars: int = Field(12000, gt=0)
+    ai_max_output_tokens: int = Field(2048, gt=0)
+    # Cleanup output is as long as its input, and Indic scripts cost several tokens per
+    # character: keep cleanup windows well inside ai_max_output_tokens.
+    ai_cleanup_window_chars: int = Field(3000, gt=0)
+    ai_temperature: float = Field(0.2, gt=0, le=2)
+    ai_retry_max_attempts: int = Field(3, gt=0)
+    ai_retry_max_wait_s: float = Field(20, gt=0)
+    ai_circuit_failure_threshold: int = Field(3, gt=0)
+    ai_circuit_cooldown_s: float = Field(60, gt=0)
+    ai_user_requests_per_minute: int = Field(6, gt=0)
+    ai_global_requests_per_minute: int = Field(20, gt=0)
+    ai_queue_max: int = Field(8, gt=0)
+    ai_job_timeout_s: float = Field(600, gt=0)
+    ai_brief_max_notes: int = Field(200, gt=0)
     whisper_model: str = "large-v3-turbo"
     whisper_fallback_model: str = "large-v3"
     whisper_device: Literal["auto", "cuda", "cpu"] = "auto"
@@ -132,6 +154,8 @@ class Settings(BaseSettings):
         "sambanova_max_rpm",
         "local_llm_base_url",
         "local_llm_model",
+        "local_llm_api_key",
+        "local_llm_max_rpm",
         mode="before",
     )
     @classmethod
@@ -143,6 +167,30 @@ class Settings(BaseSettings):
     def strong_shared_secret(cls, value: SecretStr | None) -> SecretStr | None:
         if value is not None and len(value.get_secret_value()) < 32:
             raise ValueError("Shared secret must contain at least 32 characters")
+        return value
+
+    @field_validator("local_llm_base_url")
+    @classmethod
+    def local_llm_stays_on_laptop(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            parsed = urlsplit(value)
+            host = parsed.hostname or ""
+            local = host == "localhost" or ip_address(host).is_loopback
+            if (
+                not local
+                or parsed.scheme not in {"http", "https"}
+                or parsed.username
+                or parsed.password
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError
+        except ValueError:
+            raise ValueError(
+                "Local LLM URL must be an HTTP(S) loopback URL without credentials."
+            ) from None
         return value
 
     @field_validator(
@@ -166,7 +214,9 @@ class Settings(BaseSettings):
         # Import only the tokenizer constants, never initialize a model or probe CUDA.
         from app.services.cuda_windows import prepare_cuda_dlls
 
-        cuda_dirs = prepare_cuda_dlls()
+        # Tokenizer imports native libraries only once. Re-registering DLL directories
+        # for every Settings instance leaks Windows loader registrations in long processes.
+        cuda_dirs = prepare_cuda_dlls() if "faster_whisper.tokenizer" not in sys.modules else None
         from faster_whisper.tokenizer import _LANGUAGE_CODES
 
         del cuda_dirs  # ModelManager retains its own handles while models are in use.

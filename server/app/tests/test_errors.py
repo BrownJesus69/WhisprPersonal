@@ -1,10 +1,28 @@
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
+from app.core.errors import ERROR_STATUSES, ErrorCode
+
 
 class Payload(BaseModel):
     number: int
+
+
+@pytest.mark.parametrize(
+    "code,status",
+    [
+        ("privacy_mode_unknown", 503),
+        ("cloud_ai_disabled_for_event", 403),
+        ("transcript_incomplete", 409),
+        ("transcript_too_long", 422),
+        ("job_timeout", 500),
+        ("ai_output_invalid", 500),
+    ],
+)
+def test_ai_error_mapping(code: str, status: int) -> None:
+    assert ERROR_STATUSES[ErrorCode(code)] == status
 
 
 def test_not_found(client: TestClient) -> None:

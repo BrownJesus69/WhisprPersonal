@@ -27,7 +27,10 @@ def build_health(request: Request) -> HealthResponse:
     state: ServerState = request.app.state.server_state
     now = datetime.now(UTC)
 
-    def provider(configured: bool) -> ProviderInfo:
+    def provider(configured: bool, name: str) -> ProviderInfo:
+        ai_router = getattr(request.app.state, "ai_router", None)
+        if ai_router:
+            return ProviderInfo(configured=configured, **ai_router.status()[name])
         return ProviderInfo(
             configured=configured,
             status="configured_unchecked" if configured else "not_configured",
@@ -60,9 +63,9 @@ def build_health(request: Request) -> HealthResponse:
             workers=settings.worker_count,
         ),
         providers=ProvidersInfo(
-            groq=provider(settings.groq_configured),
-            sambanova=provider(settings.sambanova_configured),
-            local_llm=provider(settings.local_llm_configured),
+            groq=provider(settings.groq_configured, "groq"),
+            sambanova=provider(settings.sambanova_configured, "sambanova"),
+            local_llm=provider(settings.local_llm_configured, "local_llm"),
         ),
         firebase=FirebaseInfo(
             credentials_present=settings.firebase_credentials_present,

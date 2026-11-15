@@ -60,6 +60,12 @@ class FakeEngine:
 
 
 class FakeEventRepo:
+    async def get_event_access(self, event_id: str) -> Any:
+        from app.security.ownership import EventAccess
+
+        owner = await self.get_event_owner(event_id)
+        return EventAccess(owner, "cloud_ai") if owner else None
+
     async def get_event_owner(self, event_id: str) -> str | None:
         return {"event1": "user-1", "other": "user-2"}.get(event_id)
 
@@ -88,6 +94,12 @@ class FakeFirestoreSync:
     async def delete_session(self, event_id: str, session_id: str) -> None:
         self.check()
         self.calls.append(("deleted", (event_id, session_id)))
+
+    async def chunks_polished(
+        self, event_id: str, session_id: str, chunks: list[dict[str, Any]]
+    ) -> None:
+        self.check()
+        self.calls.append(("polished", (event_id, session_id, chunks)))
 
 
 def create_session(client: Any, session_id: str = "session1", **values: Any) -> Any:

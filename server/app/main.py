@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,7 +15,7 @@ from app.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.request_context import RequestContextMiddleware
-from app.routers import auth, diagnostics, health, sessions, stream, vocabulary
+from app.routers import ai, auth, diagnostics, health, sessions, stream, vocabulary
 from app.security.auth import DisabledTokenVerifier, TokenVerifier
 from app.security.body_limit import BodyLimitMiddleware
 from app.security.firebase_verifier import FirebaseTokenVerifier
@@ -23,10 +24,13 @@ from app.security.headers import SecurityHeadersMiddleware
 from app.security.network import NetworkMiddleware
 from app.security.ownership import DisabledEventRepository, FirestoreEventRepository
 from app.security.rate_limit import RateLimitMiddleware, TokenBucketLimiter
+from app.services.ai.jobs import AIJobService
 from app.services.broadcaster import Broadcaster
 from app.services.firebase import FirebaseService
 from app.services.firestore_sync import DisabledFirestoreSync, FirestoreSync
 from app.services.gpu import detect_gpu
+from app.services.llm.router import build_router
+from app.services.llm.usage import UsageRecorder
 from app.services.model_manager import ModelManager
 from app.services.state import ServerState
 from app.services.store import Store
@@ -106,10 +110,26 @@ def create_app(
             app.state.server_state,
         )
         app.state.worker.event_repository_provider = lambda: app.state.event_repository
+        app.state.ai_http_client = httpx.AsyncClient(follow_redirects=False, trust_env=False)
+        app.state.ai_router = build_router(
+            settings, app.state.ai_http_client, UsageRecorder(app.state.store)
+        )
+        app.state.ai_user_limiter = TokenBucketLimiter(settings.ai_user_requests_per_minute)
+        app.state.ai_global_limiter = TokenBucketLimiter(settings.ai_global_requests_per_minute)
+        app.state.ai_jobs = AIJobService(
+            settings,
+            app.state.store,
+            app.state.ai_router,
+            lambda: app.state.event_repository,
+            lambda: app.state.firestore_sync,
+        )
+        await app.state.ai_jobs.start()
         await app.state.worker.start()
         try:
             yield
         finally:
+            await app.state.ai_jobs.stop()
+            await app.state.ai_http_client.aclose()
             await app.state.worker.stop()
             await app.state.store.close()
             await asyncio.to_thread(service.close)
@@ -125,6 +145,7 @@ def create_app(
     )
     register_exception_handlers(app)
     app.include_router(auth.router)
+    app.include_router(ai.router)
     app.include_router(health.router)
     app.include_router(diagnostics.router)
     app.include_router(sessions.router)

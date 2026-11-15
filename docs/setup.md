@@ -270,3 +270,30 @@ attempts and exponential jittered backoff. Shutdown drains for 20 seconds, below
 Run offline tests with `.venv/Scripts/python -m pytest -q -p no:cacheprovider`.
 The real GPU smoke test remains skipped unless `WHISPR_RUN_GPU_TESTS=1` and turbo files
 already exist in server/models. It retains the no_network fixture and never downloads.
+
+## Optional AI providers (Phase 8a)
+
+Leave provider keys/models empty to disable intelligence; transcription works independently.
+In your private configuration, enable Groq with both `GROQ_API_KEY` and `GROQ_MODEL`, selecting
+a model your account can access. SambaNova similarly requires `SAMBANOVA_API_KEY` and
+`SAMBANOVA_MODEL`. Nothing is assumed about accessible models or quotas. Default API bases
+are `https://api.groq.com/openai/v1` and `https://api.sambanova.ai/v1`. Local inference requires
+`LOCAL_LLM_BASE_URL` and `LOCAL_LLM_MODEL`; `LOCAL_LLM_API_KEY` is optional. Point this URL
+at a trusted OpenAI-compatible service on the laptop. The URL must use a loopback address
+(`localhost`, `127.0.0.1` or `::1`), HTTP(S), and no embedded credentials or query/fragment.
+Restart after configuring providers.
+
+Use authenticated `GET /api/v1/ai/status` to inspect local eligibility, or explicitly request
+`POST /api/v1/ai/providers/check` to probe `/models`. Health and startup never contact an LLM.
+The phone must set the owner's event `privacyMode` to `cloud_ai` to allow cloud calls;
+`local_only` permits only local inference. Firestore must be reachable to verify privacy.
+Requests still require finalized sessions (briefs may explicitly allow incomplete input).
+
+`AI_*` defaults in `.env.example` are this laptop's safety limits, **not provider quotas**:
+12,000 input characters per prompt's content window, 2048 output tokens, temperature 0.2,
+three attempts, single waits capped at 20 seconds, circuit threshold three/cooldown 60 seconds,
+six submissions/user/minute, 20 globally/minute, eight waiting jobs, 600 seconds/job and 200
+owner notes. `*_TIMEOUT_S` and `*_MAX_CONCURRENCY` bound provider operations;
+`*_MAX_RPM` is an optional local cap and remains unset by default. No additional dependency
+or model download is needed for the AI layer. With no provider configured, submissions for
+verified cloud-enabled events return `provider_unavailable` while raw transcripts stay intact.

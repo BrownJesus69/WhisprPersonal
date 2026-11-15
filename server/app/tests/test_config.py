@@ -69,3 +69,67 @@ def test_example_covers_settings(make_settings: Any) -> None:
     assert settings.server_shared_secret is None
     assert settings.groq_model is None
     assert settings.whisper_model == Settings.model_fields["whisper_model"].default
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ai_max_input_chars",
+        "ai_max_output_tokens",
+        "ai_cleanup_window_chars",
+        "ai_temperature",
+        "ai_retry_max_attempts",
+        "ai_retry_max_wait_s",
+        "ai_circuit_failure_threshold",
+        "ai_circuit_cooldown_s",
+        "ai_user_requests_per_minute",
+        "ai_global_requests_per_minute",
+        "ai_queue_max",
+        "ai_job_timeout_s",
+        "ai_brief_max_notes",
+        "local_llm_timeout_s",
+        "local_llm_max_concurrency",
+        "local_llm_max_rpm",
+    ],
+)
+def test_ai_positive_settings(make_settings: Any, name: str) -> None:
+    with pytest.raises(ValidationError):
+        make_settings(**{name: 0})
+
+
+def test_ai_configuration_requires_model_and_secret_or_url(make_settings: Any) -> None:
+    assert not make_settings(groq_api_key="mock-secret").groq_configured
+    assert not make_settings(sambanova_model="mock-model").sambanova_configured
+    assert not make_settings(local_llm_base_url="http://127.0.0.1/v1").local_llm_configured
+    settings = make_settings(
+        local_llm_api_key="mock-local-secret",
+        local_llm_model="mock-model",
+        local_llm_base_url="http://127.0.0.1/v1",
+    )
+    assert settings.local_llm_configured
+    assert "mock-local-secret" not in str(settings.safe_summary())
+    with pytest.raises(ValidationError):
+        make_settings(ai_temperature=2.1)
+
+
+@pytest.mark.parametrize(
+    "url,valid",
+    [
+        ("http://localhost:9000/v1", True),
+        ("http://127.0.0.1:9000/v1", True),
+        ("http://[::1]:9000/v1", True),
+        ("https://remote.example/v1", False),
+        ("http://192.168.1.1/v1", False),
+        ("file:///model", False),
+        ("http://private:secret@localhost/v1", False),
+        ("http://localhost/v1?key=private", False),
+    ],
+)
+def test_local_llm_loopback_only(make_settings: Any, url: str, valid: bool) -> None:
+    if valid:
+        assert make_settings(
+            local_llm_base_url=url, local_llm_model="mock-model"
+        ).local_llm_configured
+    else:
+        with pytest.raises(ValidationError):
+            make_settings(local_llm_base_url=url, local_llm_model="mock-model")

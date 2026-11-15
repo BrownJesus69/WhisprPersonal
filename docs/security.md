@@ -206,3 +206,33 @@ Firebase Auth and rules. SQLite reads/search/pushes are scoped to the signed-in 
 asynchronous sync results stop applying when the account changes. No note or credential
 contents are included in invalid-document logs. The rules tests use a demo project and the
 local emulator only; Android tests mock every external service.
+
+## AI privacy and untrusted content (Phase 8a)
+
+AI endpoints require the existing server key and verified Firebase identity or offline grant.
+Session and event ownership are checked before any provider call. Firestore must confirm
+`ownerId` and `privacyMode` now: cached/offline-tolerant transcription ownership is insufficient.
+An unavailable repository, missing privacy mode or unknown mode returns `privacy_mode_unknown`.
+Cloud providers run only for `cloud_ai`; `local_only` can use the explicitly configured local
+LLM. Privacy is rechecked when a queued job starts. Configure the local URL to a trusted
+laptop service; configuration restricts it to HTTP(S) loopback URLs without embedded
+credentials or query/fragment. Redirects and environment proxies are disabled. The server
+does not discover or download local models.
+
+Transcript, intermediate notes and owner notes are untrusted data. System prompts explicitly
+ignore instructions inside them, forbid translation and invented names/numbers/speakers or
+decisions/actions, and require an unsupported-section statement. Cleanup validates each
+marker exactly once and in order, nonempty output, length ratio 0.6–1.5, normalized word
+similarity (0.85 conservative / 0.6 polished) and unchanged dominant Unicode letter script.
+These checks reduce accidental edits; owners should still review generated output.
+Raw transcript columns are never updated by AI. Refusals or rejected cleanup leave polish null.
+
+Keys remain `SecretStr` and are only used in outbound authorization headers. Provider errors
+contain safe kinds, never response bodies, headers or exception messages. `ai_usage` and
+`ai_call` logs contain provider/model, purpose, job/request ids, timings, token counts when
+available and outcome/error kind. They contain no prompts, notes, transcripts or generated
+content. HTTP library wire/URL logging is disabled; only allowlisted numeric remaining counts
+are logged, and these are never interpreted as quotas. Job parameters/results contain owner
+content in the existing local SQLite data directory; protect that directory like transcripts.
+No keys are written to jobs, Firestore, client responses or QR codes. Health never contacts
+providers, and unfinished paid jobs never replay automatically after restart.

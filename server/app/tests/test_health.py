@@ -27,7 +27,7 @@ def test_provider_config_and_no_leaks(make_settings: Any, tmp_path: Path) -> Non
     settings = make_settings(groq_api_key=key, groq_model="test-model")
     with TestClient(create_app(settings), client=("127.0.0.1", 1)) as client:
         response = client.get("/health")
-    assert response.json()["providers"]["groq"]["status"] == "configured_unchecked"
+    assert response.json()["providers"]["groq"]["status"] == "ready"
     for forbidden in (key, settings.server_shared_secret.get_secret_value(), str(tmp_path)):
         assert forbidden not in response.text
     settings = make_settings(groq_api_key=key)

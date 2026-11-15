@@ -106,6 +106,18 @@ def configure_logging(settings: Settings) -> None:
     # Inference library warnings may include local model paths or decoder data.
     # Our engine reports only safe codes, timings and IDs instead.
     logging.getLogger("faster_whisper").disabled = True
+    # Provider URLs may contain private local connection details. Our ai_call metadata
+    # replaces HTTP library logs (which can include URLs, headers or wire debug data).
+    for name in (
+        "httpx",
+        "httpx2",
+        "httpcore",
+        "httpcore.connection",
+        "httpcore.http11",
+        "httpcore.http2",
+        "httpcore.proxy",
+    ):
+        logging.getLogger(name).disabled = True
     for name in ("uvicorn", "uvicorn.error"):
         logger = logging.getLogger(name)
         logger.handlers = []

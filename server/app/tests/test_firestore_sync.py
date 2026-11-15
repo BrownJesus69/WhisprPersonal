@@ -174,3 +174,22 @@ def test_delete_removes_nested_chunks_in_bounded_batches() -> None:
     assert [len(batch) for batch in client.batches] == [450, 450, 2]
     assert not client.remaining
     assert client.deleted == ["/events/event1/sessions/session1"]
+
+
+def test_polished_projection_only_merges_polished_text() -> None:
+    client = FakeClient()
+
+    class Service:
+        def firestore(self) -> Any:
+            return client
+
+    chunks = [
+        {"chunk_id": f"c{i}", "polished_text": "cleaned", "raw_text": "speech"} for i in range(901)
+    ]
+    asyncio.run(FirestoreSync(Service()).chunks_polished("event1", "session1", chunks))
+    assert [len(batch) for batch in client.batches] == [450, 450, 1]
+    assert all(
+        data == {"polishedText": "cleaned"} and merge
+        for batch in client.batches
+        for _, data, merge in batch
+    )

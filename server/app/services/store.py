@@ -60,6 +60,27 @@ CREATE TABLE audit_log (
 CREATE TABLE event_owners (event_id TEXT PRIMARY KEY, owner_uid TEXT NOT NULL, verified_at TEXT);
 ALTER TABLE sessions ADD COLUMN ownership_pending INTEGER NOT NULL DEFAULT 0;
 """,
+    # 5: optional AI output is separate from immutable speech text.
+    """
+ALTER TABLE chunks ADD COLUMN polished_text TEXT;
+ALTER TABLE chunks ADD COLUMN polished_level TEXT;
+ALTER TABLE chunks ADD COLUMN polish_error TEXT;
+ALTER TABLE chunks ADD COLUMN polished_at TEXT;
+CREATE TABLE ai_jobs (
+ id TEXT PRIMARY KEY, owner_uid TEXT NOT NULL,
+ kind TEXT NOT NULL CHECK(kind IN ('cleanup','brief')),
+ event_id TEXT NOT NULL, session_ids TEXT NOT NULL, params_json TEXT NOT NULL,
+ status TEXT NOT NULL CHECK(status IN ('queued','running','done','failed','interrupted')),
+ provider TEXT, model TEXT, result_json TEXT, error_code TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX ai_jobs_owner ON ai_jobs(owner_uid, created_at);
+CREATE TABLE ai_usage (
+ id INTEGER PRIMARY KEY, ts TEXT NOT NULL, job_id TEXT, uid TEXT, provider TEXT NOT NULL,
+ model TEXT, purpose TEXT NOT NULL, outcome TEXT NOT NULL, error_kind TEXT,
+ latency_ms INTEGER, prompt_tokens INTEGER, completion_tokens INTEGER
+);
+""",
 ]
 
 
@@ -171,6 +192,11 @@ class Store:
                         + f"\nPRAGMA user_version={index + 1};\nCOMMIT;"
                     )
                 with self.connection:
+                    self.connection.execute(
+                        "UPDATE ai_jobs SET status='interrupted', updated_at=? "
+                        "WHERE status IN ('queued','running')",
+                        (utc_now(),),
+                    )
                     self.connection.execute(
                         # Retain through the maximum supported verifier clock skew (60s).
                         "DELETE FROM revoked_grants WHERE exp < ?",

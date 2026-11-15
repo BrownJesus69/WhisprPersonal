@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from fastapi import Request
@@ -15,11 +16,22 @@ from app.services.firebase import FirebaseService
 from app.services.store import utc_now
 
 
+@dataclass(frozen=True)
+class EventAccess:
+    owner_uid: str
+    privacy_mode: str | None
+
+
 class EventOwnershipRepository(Protocol):
     async def get_event_owner(self, event_id: str) -> str | None: ...
 
+    async def get_event_access(self, event_id: str) -> EventAccess | None: ...
+
 
 class DisabledEventRepository:
+    async def get_event_access(self, event_id: str) -> EventAccess | None:
+        return None
+
     async def get_event_owner(self, event_id: str) -> str | None:
         raise AppError(ErrorCode.auth_not_configured, "Firebase is not configured.")
 
@@ -35,18 +47,30 @@ class FirestoreEventRepository:
         self._down_until = 0.0
 
     async def get_event_owner(self, event_id: str) -> str | None:
+        access = await self._fetch_access(event_id, ["ownerId"])
+        return access.owner_uid if access else None
+
+    async def get_event_access(self, event_id: str) -> EventAccess | None:
+        return await self._fetch_access(event_id, ["ownerId", "privacyMode"])
+
+    async def _fetch_access(self, event_id: str, fields: list[str]) -> EventAccess | None:
         validate_doc_id(event_id, "event_id")
 
-        def fetch() -> str | None:
+        def fetch() -> EventAccess | None:
             snapshot = (
                 self.service.firestore()
                 .collection("events")
                 .document(event_id)
-                .get(field_paths=["ownerId"])
+                .get(field_paths=fields)
             )
             data = snapshot.to_dict() if snapshot.exists else None
             owner = data.get("ownerId") if data else None
-            return owner if isinstance(owner, str) else None
+            mode = data.get("privacyMode") if data else None
+            return (
+                EventAccess(owner, mode if isinstance(mode, str) else None)
+                if isinstance(owner, str)
+                else None
+            )
 
         unavailable = AppError(ErrorCode.firestore_unavailable, "Event storage is unavailable.")
         if time.monotonic() < self._down_until:

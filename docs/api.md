@@ -275,3 +275,59 @@ The adapter writes complete documents with `setDoc` (no merge). Server acknowled
 asynchronous and never blocks note editing. Subscriptions order by createdAt, limit 500,
 include metadata changes and report pending-write metadata; the engine ignores local echoes.
 No composite notes index is required. Malformed cloud documents are ignored with a safe code.
+
+## Optional AI jobs (Phase 8a)
+
+All routes below require the server key plus a Firebase ID token or offline grant. Jobs,
+sessions and events must belong to the verified uid. Every submission confirms the event's
+current Firestore `ownerId` and `privacyMode`; cached ownership cannot authorize AI.
+
+| Method and path | Body / response |
+| --- | --- |
+| `POST /api/v1/notes/cleanup` | `{event_id, session_ids, level}`; level is `conservative` (default) or `polished` |
+| `POST /api/v1/briefs` | `{event_id, session_ids, brief_type, allow_incomplete:false, use_polished:false, notes:[]}` |
+| `GET /api/v1/ai/jobs/{job_id}` | `{job_id, kind, status, provider, model, error_code, result}`; other owners receive 404 |
+| `GET /api/v1/sessions/{session_id}/polished` | `{session_id, chunks:[{sequence, polished_text, polished_level, polish_error}]}` |
+| `GET /api/v1/ai/status` | `{providers:{groq,sambanova,local_llm}, cloud_available, local_available}`; no HTTP probes |
+| `POST /api/v1/ai/providers/check` | Explicit `/models` probes; `{provider:ok\|auth_failed\|unreachable\|not_configured}` |
+
+Both submissions return **202** `{job_id,status:"queued"}`. Supply 1–20 session ids.
+Cleanup requires finalized sessions and never modifies `raw_text` or `raw_text_full`.
+Briefs require finalized, complete transcripts unless `allow_incomplete` is true.
+Brief types: `summary`, `action_items`, `decisions`, `follow_ups`, `full` (default).
+Owner notes contain `{text,timestamp_ms:null,speaker:null}`; text is at most 5000 characters,
+timestamp nonnegative. The server caps note count with `AI_BRIEF_MAX_NOTES`.
+Notes are labelled separately from speech in every prompt.
+
+Job states: `queued → running → done|failed|interrupted`. Shutdown cancels execution;
+startup marks all queued/running jobs interrupted and never automatically replays paid work.
+Poll the job endpoint; submitting again creates a new job. Request ids correlate usage logs.
+Cleanup results contain accepted/rejected/skipped counts and the last successful provider/model.
+Partial cleanup remains available if a later window fails; its counts are retained in `result`.
+Validation failures leave the chunk's polished text null with a safe `polish_error`.
+If every attempted chunk fails validation, the job fails with `ai_output_invalid` and retains
+the rejected/skipped counts; accepted partial cleanup completes normally.
+Successful polished projections are merged into Firestore independently of job completion.
+
+Brief results contain `{brief_type,generated_text,structured_brief,brief_warning,provider,model,
+incomplete,source:{session_ids,chunk_count,used_polished}}`. `used_polished` means at least one
+polished chunk was used; missing polish falls back to raw text. Structured output maps required
+headings to bullets or text. Missing headings yield `structured_brief:null` and
+`brief_warning:"unstructured_output"`; output is capped at 100,000 characters. Briefs remain
+local to the server job; the phone reviews/edits/saves them in Phase 8b.
+
+Cloud calls require `privacyMode:"cloud_ai"`. `local_only` can use a configured local LLM;
+without one it receives 403 `cloud_ai_disabled_for_event`. Unconfirmed privacy/ownership
+receives 503 `privacy_mode_unknown`, even when a local LLM is configured. Confirmed other
+owners receive 404. Privacy is checked again when the queued job executes.
+After ownership and privacy checks, no usable provider yields **503** `provider_unavailable`
+with **"Cloud AI unavailable; raw transcript preserved."**. Incomplete input yields 409
+`transcript_incomplete`; excessive chunk/reduction input yields 422 `transcript_too_long` (or
+the same code on a failed job). AI user/global admission limits return 429 `rate_limited`
+with `Retry-After`; a full/stopping AI queue returns 503 `queue_full`.
+`job_timeout` and `ai_output_invalid` are job error codes, not submission responses.
+All HTTP errors retain the existing `{error:{code,message,request_id}}` envelope.
+
+Provider status fields are `{status,model,last_error_kind}`. Status is `not_configured`,
+`ready`, `degraded`, `circuit_open`, or `auth_failed`. `ready` means locally eligible, not
+remotely verified. `/health` includes these statuses plus `configured` and never probes.

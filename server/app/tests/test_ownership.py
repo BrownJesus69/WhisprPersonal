@@ -10,6 +10,8 @@ from google.auth.exceptions import RefreshError, TransportError
 from app.core.errors import AppError, error_response
 from app.security.auth import VerifiedUser
 from app.security.ownership import (
+    DisabledEventRepository,
+    EventAccess,
     FirestoreEventRepository,
     require_event_owner,
     require_owner,
@@ -97,3 +99,21 @@ def test_firestore_projection(exists: bool, data: Any, expected: str | None) -> 
     client.collection.assert_called_once_with("events")
     client.collection.return_value.document.assert_called_once_with("event1")
     get.assert_called_once_with(field_paths=["ownerId"])
+
+
+def test_event_access_projection_and_fail_fast() -> None:
+    client = Mock()
+    get = client.collection.return_value.document.return_value.get
+    get.return_value = SimpleNamespace(
+        exists=True,
+        to_dict=lambda: {"ownerId": "u", "privacyMode": "local_only", "unrelated": "private data"},
+    )
+    repo = FirestoreEventRepository(SimpleNamespace(firestore=Mock(return_value=client)))
+    assert asyncio.run(repo.get_event_access("event1")) == EventAccess("u", "local_only")
+    get.assert_called_once_with(field_paths=["ownerId", "privacyMode"])
+    get.side_effect = ServiceUnavailable("private content")
+    for _ in range(2):
+        with pytest.raises(AppError):
+            asyncio.run(repo.get_event_access("event1"))
+    assert get.call_count == 2
+    assert asyncio.run(DisabledEventRepository().get_event_access("event1")) is None

@@ -150,3 +150,34 @@ Quick notes stamp current elapsed recording milliseconds only while recording or
 Final transcript rows can be copied into notes by long press or an accessibility action;
 partial and failed rows never expose that action. Raw transcript storage is unchanged.
 AI-assisted notes remain disabled with a not-configured label.
+
+## Optional server intelligence (Phase 8a)
+
+Explicit cleanup and brief requests use `services/llm`: Groq → SambaNova → configured local
+LLM → unavailable. The transcription worker has no dependency on this chain and never
+invokes it during recording or per audio chunk. Key plus model enables a cloud provider;
+URL plus model enables local inference. No model id or provider quota is assumed.
+
+A shared asynchronous HTTP client sends a minimal non-streaming chat payload with a bounded
+provider timeout. Groq uses `max_completion_tokens`; SambaNova/local use `max_tokens`.
+Each provider has its own semaphore and optional laptop RPM bucket. Transient errors retry
+with full jitter; 429 honours seconds or HTTP-date `Retry-After`. An excessive wait triggers
+fallback immediately. Auth failures open the circuit immediately; consecutive transient or
+invalid-response failures open it at the configured threshold. After cooldown only one
+half-open request probes the circuit. Bad requests fall back without incrementing failures.
+
+`AIJobService` owns a bounded queue and one asyncio worker, separate from the serialized
+Whisper executor. Migration 5 persists jobs, attempt usage and separate polished columns.
+All SQLite operations remain serialized in worker threads. Per-window cleanup validates
+markers, similarity, length and Unicode script before a transactional polish write. Briefs
+use timestamped stitched chunks, optionally preferring existing polish. Long inputs split
+on chunk boundaries, map to notes and reduce within the same character budget, with at most
+one extra reduction level. Oversized chunks/notes fail instead of silently truncating speech.
+
+Fresh Firestore event access is required at admission and execution. `cloud_ai` allows the
+full chain; `local_only` skips both cloud providers. Unknown mode or unavailable Firestore
+fails closed. Job ownership remains local and independent of provider availability.
+Cancellation/timeout records a terminal state; startup interrupts unfinished jobs without
+automatic replay. AI attempt audits contain metadata only. Polished Firestore projections
+use merges of at most 450 chunks and a 10-second bound; projection failures do not fail jobs.
+Briefs are never written to Firestore by the server.

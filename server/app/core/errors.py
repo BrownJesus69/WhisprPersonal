@@ -40,6 +40,12 @@ class ErrorCode(StrEnum):
     rate_limited = "rate_limited"
     feature_disabled = "feature_disabled"
     provider_unavailable = "provider_unavailable"
+    privacy_mode_unknown = "privacy_mode_unknown"
+    cloud_ai_disabled_for_event = "cloud_ai_disabled_for_event"
+    transcript_incomplete = "transcript_incomplete"
+    transcript_too_long = "transcript_too_long"
+    job_timeout = "job_timeout"
+    ai_output_invalid = "ai_output_invalid"
     queue_full = "queue_full"
     model_not_ready = "model_not_ready"
     internal_error = "internal_error"
@@ -71,6 +77,12 @@ ERROR_STATUSES: dict[ErrorCode, int] = {
     ErrorCode.rate_limited: 429,
     ErrorCode.feature_disabled: 503,
     ErrorCode.provider_unavailable: 503,
+    ErrorCode.privacy_mode_unknown: 503,
+    ErrorCode.cloud_ai_disabled_for_event: 403,
+    ErrorCode.transcript_incomplete: 409,
+    ErrorCode.transcript_too_long: 422,
+    ErrorCode.job_timeout: 500,
+    ErrorCode.ai_output_invalid: 500,
     ErrorCode.queue_full: 503,
     ErrorCode.model_not_ready: 503,
     ErrorCode.internal_error: 500,

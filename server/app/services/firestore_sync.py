@@ -45,7 +45,7 @@ def chunk_fields(chunk: dict[str, Any]) -> dict[str, Any]:
         "languageSource": chunk["language_source"],
         "userOverride": chunk["language_source"] == "override",
         "rawText": chunk["raw_text"] or "",
-        "polishedText": None,
+        "polishedText": chunk.get("polished_text"),
         "error": chunk["error_code"],
         "createdAt": timestamp(chunk["created_at"]),
         "updatedAt": timestamp(chunk["updated_at"]),
@@ -54,6 +54,11 @@ def chunk_fields(chunk: dict[str, Any]) -> dict[str, Any]:
 
 class DisabledFirestoreSync:
     enabled = False
+
+    async def chunks_polished(
+        self, event_id: str, session_id: str, chunks: list[dict[str, Any]]
+    ) -> None:
+        pass
 
     async def session_started(self, session: dict[str, Any]) -> None:
         pass
@@ -128,6 +133,27 @@ class FirestoreSync:
             reference.delete()
 
         await self._run(delete)
+
+    async def chunks_polished(
+        self, event_id: str, session_id: str, chunks: list[dict[str, Any]]
+    ) -> None:
+        def write() -> None:
+            client = self.service.firestore()
+            reference = self.reference(event_id, session_id).collection("chunks")
+            for offset in range(0, len(chunks), 450):
+                batch = client.batch()
+                for chunk in chunks[offset : offset + 450]:
+                    batch.set(
+                        reference.document(chunk["chunk_id"]),
+                        {"polishedText": chunk["polished_text"]},
+                        merge=True,
+                    )
+                batch.commit()
+
+        try:
+            await asyncio.wait_for(asyncio.to_thread(write), timeout=10)
+        except Exception:
+            raise FirestoreSyncError("firestore_unavailable") from None
 
     async def _run(self, operation: Any) -> None:
         try:
