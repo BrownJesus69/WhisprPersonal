@@ -1,0 +1,20 @@
+# WhisprPersonal local translator (IndicTrans2), separate venv: translator/.venv (Python 3.12).
+# Install torch from the CUDA index first (driver supports CUDA 12.6):
+#   .venv\Scripts\python -m pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cu126
+torch==2.14.1
+transformers==5.23.0
+sentencepiece==0.2.3
+safetensors==0.8.0
+huggingface_hub==2.4.0
+sacremoses==0.2.0
+regex==2026.11.15
+tqdm==4.70.1
+indic-nlp-library-itt==0.1.1
+sacrebleu==2.6.0
+fastapi==0.163.1
+uvicorn==0.54.0
+pydantic==2.14.3
+pydantic-settings==2.16.3
+httpx==0.28.1
+pytest==9.2.0
+ruff==0.17.5
