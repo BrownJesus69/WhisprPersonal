@@ -11,6 +11,7 @@ export interface Settings {
   privacyMode: PrivacyMode;
   chunkSeconds: number;
   overlapMs: number;
+  deleteLocalAudioAfterTranscription: boolean;
 }
 
 export const defaults: Settings = {
@@ -20,7 +21,8 @@ export const defaults: Settings = {
   cleanupLevel: 'none',
   privacyMode: 'local_only',
   chunkSeconds: 10,
-  overlapMs: 1200
+  overlapMs: 1200,
+  deleteLocalAudioAfterTranscription: false
 };
 
 export function normalizeSettings(value: Partial<Settings>): Settings {
@@ -32,7 +34,8 @@ export function normalizeSettings(value: Partial<Settings>): Settings {
     cleanupLevel: ['none', 'conservative', 'polished'].includes(s.cleanupLevel) ? s.cleanupLevel : 'none',
     privacyMode: s.privacyMode === 'cloud_ai' ? 'cloud_ai' : 'local_only',
     chunkSeconds: Number.isFinite(s.chunkSeconds) ? Math.max(5, Math.min(15, s.chunkSeconds)) : 10,
-    overlapMs: Number.isFinite(s.overlapMs) ? Math.max(1000, Math.min(1500, s.overlapMs)) : 1200
+    overlapMs: Number.isFinite(s.overlapMs) ? Math.max(1000, Math.min(1500, s.overlapMs)) : 1200,
+    deleteLocalAudioAfterTranscription: s.deleteLocalAudioAfterTranscription === true
   };
 }
 

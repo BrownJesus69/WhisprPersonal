@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { Pressable, Text, ActivityIndicator } from 'react-native';
 import { useTheme, typography, spacing } from '@/theme';
 
-export function Button({ label, onPress, disabled = false, loading = false, secondary = false, selected }: {
+export function Button({ label, onPress, disabled = false, loading = false, secondary = false, selected, large = false }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
   secondary?: boolean;
   selected?: boolean;
+  large?: boolean;
 }) {
   const t = useTheme();
   const [focused, setFocused] = useState(false);
@@ -21,7 +22,7 @@ export function Button({ label, onPress, disabled = false, loading = false, seco
     onFocus={() => setFocused(true)}
     onBlur={() => setFocused(false)}
     style={({ pressed }) => ({
-      minHeight: 48,
+      minHeight: large ? 64 : 48,
       maxWidth: '100%',
       padding: spacing.sm,
       borderRadius: 16,

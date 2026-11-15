@@ -111,6 +111,16 @@ def test_normalize_keeps_indic_marks_and_strips_punctuation() -> None:
     assert normalize_word(" Hello") == "hello"
 
 
+def test_render_keeps_subword_tokens_attached() -> None:
+    # Real large-v3-turbo tokens for "at 2.30 in the afternoon." (Phase 5 GPU check).
+    tokens = [" at", " 2", ".30", " in", " the", " afternoon."]
+    words = [AbsWord(i * 100, i * 100 + 90, t) for i, t in enumerate(tokens)]
+    assert render(words)[0] == "at 2.30 in the afternoon."
+    assert (
+        render([AbsWord(0, 1, " Dr"), AbsWord(1, 2, "."), AbsWord(2, 3, " Iyer")])[0] == "Dr. Iyer"
+    )
+
+
 def test_absolute_conversion_render_and_json_round_trip() -> None:
     words = to_absolute([Word(0.25, 0.5, " hi", 0), Word(0.5, 0.9, " there.", 1)], 10000)
     assert words == [AbsWord(10250, 10500, " hi", 0), AbsWord(10500, 10900, " there.", 1)]

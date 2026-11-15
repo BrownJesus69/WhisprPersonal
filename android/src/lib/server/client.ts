@@ -30,10 +30,13 @@ export class ServerClient {
   post<T>(path: string, body?: unknown, options: Options = { auth: true }): Promise<T> {
     return this.request(path, body, options, true);
   }
-  private async request<T>(path: string, body: unknown, options: Options, post = false, retried = false): Promise<T> {
+  postMultipart<T>(path: string, form: FormData, options: { timeoutMs?: number } = {}): Promise<T> {
+    return this.request(path, form, { ...options, auth: true }, true, false, true);
+  }
+  private async request<T>(path: string, body: unknown, options: Options, post = false, retried = false, multipart = false): Promise<T> {
     if (!path.startsWith('/') || path.startsWith('//') || path.includes('://'))
       throw new ServerError(0, 'invalid_path', 'Invalid server endpoint');
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = multipart ? {} : { 'Content-Type': 'application/json' };
     if (options.auth) {
       const key = await this.deps.getServerKey();
       if (!key)
@@ -49,7 +52,7 @@ export class ServerClient {
       response = await fetch(`${this.baseUrl}${path}`, {
         method: post ? 'POST' : 'GET',
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: body === undefined ? undefined : multipart ? body as FormData : JSON.stringify(body),
         signal: controller.signal
       });
       data = await response.json().catch(() => null);
@@ -66,7 +69,7 @@ export class ServerClient {
         ? envelope.error.code : 'server_error';
       if (code === 'auth_token_expired' && options.auth && !retried) {
         await this.deps.onAuthExpired();
-        return this.request(path, body, options, post, true);
+        return this.request(path, body, options, post, true, multipart);
       }
       const retry = response.headers.get('Retry-After');
       const parsedSeconds = retry ? (Number.isFinite(Number(retry)) ? Math.max(0, Number(retry)) : Math.max(0, Math.ceil((Date.parse(retry) - Date.now()) / 1000))) : undefined;

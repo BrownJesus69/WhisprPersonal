@@ -1,4 +1,7 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { createLocalSession } from '@/lib/session/recordingStore';
+import { repositories } from '@/lib/db/repositories';
 import { useQuery } from '@tanstack/react-query';
 import { getEvent } from '@/lib/firebase/events';
 import { useAuthStore } from '@/state/authStore';
@@ -14,6 +17,10 @@ export default function EventDetail() {
     eventId: string;
   }>();
   const uid = useAuthStore(s => s.user?.uid);
+  const [startError, setStartError] = useState('');
+  const [starting, setStarting] = useState(false);
+  const sessions = useQuery({ queryKey: ['local-sessions', uid, eventId], enabled: !!uid, refetchInterval: 3000,
+    queryFn: async () => (await (await repositories()).sessions(uid!)).filter(s => s.event_id === eventId) });
   const { data: event, isPending, error } = useQuery({ queryKey: ['event', uid, eventId], enabled: !!uid, queryFn: () => getEvent(eventId, uid!) });
   return <Screen title={event?.title ?? 'Event'}>
     {isPending && <Banner message="Loading event…" />}
@@ -32,10 +39,13 @@ export default function EventDetail() {
         <KeyValueRow label="Language mode" value={event.languageMode} />
         <KeyValueRow label="Privacy" value={event.privacyMode} />
       </Card>
-      <Button disabled label="Start session" onPress={() => {
+      <Button label="Start session" loading={starting} onPress={() => {
+        setStarting(true); setStartError('');
+        void createLocalSession(event).then(s => router.push({ pathname: '/session/[sessionId]', params: { sessionId: s.id } })).catch(() => setStartError('Could not create a local session. Check phone storage and try again.')).finally(() => setStarting(false));
       }} />
-      <Banner message="Recording arrives in the next update" />
-      <Banner message="Recording consent preview: before recording, tell everyone that audio will be sent to your own laptop and transcripts and notes will sync to Firebase. Obtain permission from all participants. Cloud AI is optional. No recording has started." />
+      {startError && <Banner error message={startError} />}
+      {sessions.error && <Banner error message="Could not load saved sessions." />}
+      {sessions.data?.map(s => <Button key={s.id} secondary label={`${new Date(s.created_at).toLocaleString()} · ${s.consent_at ? s.status : 'ready'}`} onPress={() => router.push({ pathname: '/session/[sessionId]', params: { sessionId: s.id } })} />)}
     </>}
   </Screen>;
 }

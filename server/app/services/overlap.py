@@ -178,17 +178,21 @@ def stitch(
     return [w for i, w in enumerate(own.words) if i not in drop]
 
 
+def _join(words: list[AbsWord]) -> str:
+    # Whisper word tokens carry their own leading space only where a word boundary exists
+    # (" 2" + ".30" -> " 2.30"). Stripping each token and joining with spaces produced
+    # "2 .30" (found in the Phase 5 real-GPU check), so concatenate raw tokens and only
+    # normalise whitespace runs.
+    return " ".join("".join(w.text for w in words).split())
+
+
 def render(words: list[AbsWord]) -> tuple[str, list[dict[str, Any]]]:
     """Raw text and segments (grouped by the engine's original segments)."""
     groups: dict[int, list[AbsWord]] = {}
     for word in words:
         groups.setdefault(word.segment, []).append(word)
     segments = [
-        {
-            "start_ms": group[0].start_ms,
-            "end_ms": group[-1].end_ms,
-            "text": " ".join(" ".join(w.text.strip() for w in group).split()),
-        }
+        {"start_ms": group[0].start_ms, "end_ms": group[-1].end_ms, "text": _join(group)}
         for group in groups.values()
     ]
-    return " ".join(" ".join(w.text.strip() for w in words).split()), segments
+    return _join(words), segments

@@ -6,7 +6,7 @@ module.exports = {
     name: 'WhisprPersonal',
     slug: 'whisprpersonal',
     scheme: 'whisprpersonal',
-    version: '0.4.0',
+    version: '0.5.0',
     platforms: ['android'],
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',
@@ -16,9 +16,12 @@ module.exports = {
       // EAS cloud builds: provide google-services.json as an EAS *file* env var named
       // GOOGLE_SERVICES_JSON (the local file is git-ignored and not uploaded).
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './app/google-services.json',
-      permissions: ['CAMERA'], // RECORD_AUDIO is added in Phase 5
+      permissions: ['CAMERA', 'RECORD_AUDIO'],
       blockedPermissions: [
-        'android.permission.RECORD_AUDIO',
+        'android.permission.READ_PHONE_STATE',
+        'android.permission.BLUETOOTH',
+        'android.permission.BLUETOOTH_ADMIN',
+        'android.permission.BLUETOOTH_CONNECT',
         'android.permission.READ_EXTERNAL_STORAGE',
         'android.permission.WRITE_EXTERNAL_STORAGE',
         'android.permission.SYSTEM_ALERT_WINDOW',
@@ -49,6 +52,15 @@ module.exports = {
       ],
       'expo-secure-store',
       'expo-sqlite',
+      ['@siteed/audio-studio', {
+        // Calls are detected through audio-focus interruptions without reading phone state.
+        enablePhoneStateHandling: false,
+        // Visible recording notification and foreground microphone service for screen lock.
+        enableNotifications: true,
+        enableBackgroundAudio: true,
+        // Built-in microphone only; no Bluetooth/USB discovery permissions.
+        enableDeviceDetection: false,
+      }],
       [
         'expo-build-properties',
         {
@@ -63,6 +75,8 @@ module.exports = {
           },
         },
       ],
+      // Must run last: Android-only introspection and removal of Phase 4's stale mic block.
+      './plugins/withAndroidRecording',
     ],
     extra: {
       features: {

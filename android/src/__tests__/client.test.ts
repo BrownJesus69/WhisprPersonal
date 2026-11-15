@@ -13,6 +13,20 @@ function setup() {
   return { client, onAuthExpired };
 }
 
+test('multipart uses auth and retains the same form on one token refresh without Content-Type', async () => {
+  const { client, onAuthExpired } = setup();
+  mockFetch().mockResolvedValueOnce(response({ error: { code: 'auth_token_expired', message: 'expired', request_id: 'r' } },401))
+    .mockResolvedValueOnce(response({ duplicate: true },200));
+  const form = new FormData(); form.append('sequence','0');
+  await expect(client.postMultipart('/chunks',form,{ timeoutMs: 60000 })).resolves.toEqual({ duplicate: true });
+  expect(onAuthExpired).toHaveBeenCalledTimes(1);
+  for (const [,options] of mockFetch().mock.calls) {
+    expect(options?.body).toBe(form);
+    expect(options?.headers).not.toHaveProperty('Content-Type');
+    expect(options?.headers).toHaveProperty('Authorization');
+  }
+});
+
 test('success and protected headers', async () => {
   const { client } = setup();
   mockFetch().mockResolvedValue(response({ ok: true }));

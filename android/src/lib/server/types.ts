@@ -3,6 +3,15 @@ export interface ProviderHealth {
   status: 'not_configured' | 'configured_unchecked';
 }
 
+export interface ChunkUploadResponse {
+  chunk_id: string; sequence: number; status: string; duplicate: boolean;
+}
+export interface SessionResponse {
+  status: string;
+  chunks: { chunk_id: string; sequence: number; status: 'queued' | 'processing' | 'done' | 'failed'; error_code?: string | null }[];
+}
+export interface FinalizeResponse { status: string; missing_sequences?: number[]; pending?: number }
+
 export interface Health {
   status: 'ok' | 'degraded';
   version: string;
