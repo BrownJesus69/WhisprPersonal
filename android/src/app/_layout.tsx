@@ -1,3 +1,4 @@
+import { aiRuntime } from '@/lib/ai/runtime';
 import { useState, useEffect, useRef } from 'react';
 import { AudioRecorderProvider, useSharedAudioRecorder } from '@siteed/audio-studio';
 import { recorderAdapter } from '@/lib/audio/recorder';
@@ -26,6 +27,12 @@ function RecordingRuntime() {
   const user = useAuthStore(s => s.user);
   const uid = user?.uid;
   const url = useSettingsStore(s => s.serverUrl);
+  const [aiError, setAIError] = useState(false);
+  useEffect(() => {
+    let disposed = false;
+    if (uid && url) void aiRuntime.start(uid).then(() => { if (!disposed) setAIError(false); }).catch(() => { if (!disposed) setAIError(true); });
+    return () => { disposed = true; void aiRuntime.stop(); };
+  }, [uid, url]);
   const [recoveredOwner, setRecoveredOwner] = useState<AppUser | null>(null);
   const [recoveryError, setRecoveryError] = useState(false);
   const [noteSyncError, setNoteSyncError] = useState(false);
@@ -63,6 +70,7 @@ function RecordingRuntime() {
     }
   }, [uid]);
   return <>
+    {aiError && <Banner message="AI requests could not resume. Reopen the app to retry. Raw transcript is preserved." />}
     {recoveryError && <Banner error message="Local audio recovery needs attention. Reopen the app to retry. Saved files are retained." />}
     {noteSyncError && <Banner error message="Notes sync could not start. Notes stay on this phone. Reopen the app to retry." />}
   </>;
@@ -89,6 +97,7 @@ export default function RootLayout() {
               <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan laptop QR' }} />
               <Stack.Screen name="events/new" options={{ title: 'New event' }} />
               <Stack.Screen name="events/[eventId]/index" options={{ title: 'Event' }} />
+              <Stack.Screen name="events/[eventId]/brief" options={{ title: 'Briefs' }} />
               <Stack.Screen name="events/[eventId]/notes" options={{ title: 'Notes' }} />
               <Stack.Screen name="search" options={{ title: 'Search' }} />
               <Stack.Screen name="session/[sessionId]" options={{ title: 'Recording session' }} />

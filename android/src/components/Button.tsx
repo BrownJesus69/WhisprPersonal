@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Pressable, Text, ActivityIndicator } from 'react-native';
 import { useTheme, typography, spacing } from '@/theme';
 
-export function Button({ label, onPress, disabled = false, loading = false, secondary = false, selected, large = false }: {
+export function Button({ label, onPress, disabled = false, loading = false, secondary = false, selected, large = false, role = 'button' }: {
+  role?: 'button' | 'tab';
   label: string;
   onPress: () => void;
   disabled?: boolean;
@@ -14,7 +15,7 @@ export function Button({ label, onPress, disabled = false, loading = false, seco
   const t = useTheme();
   const [focused, setFocused] = useState(false);
   return <Pressable
-    accessibilityRole="button"
+    accessibilityRole={role}
     accessibilityLabel={label}
     accessibilityState={{ disabled: disabled || loading, busy: loading, selected }}
     disabled={disabled || loading}

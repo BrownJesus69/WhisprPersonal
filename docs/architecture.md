@@ -181,3 +181,38 @@ Cancellation/timeout records a terminal state; startup interrupts unfinished job
 automatic replay. AI attempt audits contain metadata only. Polished Firestore projections
 use merges of at most 450 chunks and a 10-second bound; projection failures do not fail jobs.
 Briefs are never written to Firestore by the server.
+
+## Phone AI review flow (Phase 8b)
+
+The app uses `authedClient(owner)` for uploads and AI requests. It constructs the existing
+token manager and server-key headers and checks the signed-in account before and after
+obtaining a bearer token. Provider keys and provider model configuration remain on the
+laptop. AI response validation rejects malformed data with `bad_response`; safe user text
+is centralized in `lib/ai/messages.ts`.
+
+SQLite migration 4 adds separate polished columns, durable `ai_jobs`, and `brief_drafts`.
+Transcript upserts preserve polish when raw text is unchanged, and clear all three polished
+columns when stitching revises raw text. Polished writes update only polished columns and
+check the raw text/revision observed before fetching, so a response cannot overwrite a
+concurrent raw revision. The Polished tab is explicitly labelled and falls back to raw rows
+with a Not cleaned label. Transcript-to-note actions remain on the Raw tab.
+
+`AIJobRunner` is independent of React Native and receives the API, repositories, clock and
+device id generator. The signed-in runtime polls jobs at 2 seconds with backoff capped at
+10 seconds; network/5xx failures retain pending work. A 404 becomes failed/not_found;
+server interruption is terminal and requires an explicit new request. Cleanup completion
+fetches each session's polished projection. Brief completion commits the initial draft and
+terminal job status in one transaction, preventing a crash between those writes from losing
+the draft. Draft editing serializes local writes before Save or Discard.
+
+Finalization stores the server's transcript completeness in the existing `finalize_status`
+field from the HTTP result or persisted `session_finalized` event. Older unknown values
+are treated as incomplete for brief consent. Only finalized local sessions can be selected.
+Notes are explicitly included by default, limited to the newest 200 non-deleted event notes.
+
+Saving uses the draft's device-generated id at `events/{eventId}/briefs/{briefId}` and queues
+`setDoc` without awaiting server acknowledgement. The phone marks its draft saved and keeps
+that local copy; Firestore subscriptions order by client creation time and cap at 50.
+Rules enforce event ownership, exact brief keys, types/limits, fixed owner/creation time and
+server update time. Generated text, reviewed text, provider/model, structured output and
+incomplete provenance stay separate from transcripts and notes.

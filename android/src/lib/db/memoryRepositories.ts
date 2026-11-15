@@ -1,9 +1,34 @@
+import type { AIJob, BriefDraft, PolishedChunk } from '../ai/types';
 import { normalizeSearch, type Note } from '../notes/model';
 import { languageEventRow, transcriptRow, type NotePatch, type Repositories, type LocalSession, type LocalChunk, type TranscriptRow, type LanguageEventRow } from './repositories';
 import type { LanguageMode, PersistedEvent } from '../live/events';
 
 /** Mirrors uniqueness and atomic progress updates for offline tests. */
 export class MemoryRepositories implements Repositories {
+  private jobs = new Map<string, AIJob>();
+  private drafts = new Map<string, BriefDraft>();
+  async putAIJob(job: AIJob) {
+    const old = this.jobs.get(job.job_id);
+    this.jobs.set(job.job_id, structuredClone(old ? { ...old, status: job.status, error_code: job.error_code, updated_at: job.updated_at } : job));
+  }
+  async aiJobs(owner: string, eventId?: string) { return structuredClone([...this.jobs.values()].filter(j => j.owner_uid === owner && (!eventId || j.event_id === eventId)).sort((a,b) => b.created_at.localeCompare(a.created_at) || b.job_id.localeCompare(a.job_id))); }
+  async finishAIJob(job: AIJob, draft?: BriefDraft) {
+    if (draft && !this.drafts.has(draft.id)) this.drafts.set(draft.id, structuredClone(draft));
+    const old = this.jobs.get(job.job_id);
+    if (old?.owner_uid === job.owner_uid) this.jobs.set(job.job_id, structuredClone({ ...old, status: job.status, error_code: job.error_code, updated_at: job.updated_at }));
+  }
+  async storePolished(sessionId: string, chunks: PolishedChunk[], originals: TranscriptRow[]) {
+    for (const c of chunks) {
+      const key = `${sessionId}:${c.sequence}`, row = this.transcripts.get(key), original = originals.find(r => r.sequence === c.sequence);
+      if (row && original && row.raw_text === original.raw_text && row.revision === original.revision) this.transcripts.set(key, { ...row, polished_text: c.polished_text, polished_level: c.polished_level, polish_error: c.polish_error });
+    }
+  }
+  async briefDrafts(owner: string, eventId: string) { return structuredClone([...this.drafts.values()].filter(d => d.owner_uid === owner && d.event_id === eventId).sort((a,b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))); }
+  async putBriefDraft(draft: BriefDraft) {
+    const old = this.drafts.get(draft.id);
+    this.drafts.set(draft.id, structuredClone(old ? { ...old, edited_text: draft.edited_text, status: draft.status, updated_at: draft.updated_at } : draft));
+  }
+  async deleteBriefDraft(owner: string, id: string) { const d = this.drafts.get(id); if (d?.owner_uid === owner && d.status === 'draft') this.drafts.delete(id); }
   private noteRows = new Map<string, Note>();
   async noteEventIds(owner: string) { return [...new Set([...this.noteRows.values()].filter(n => n.owner_uid === owner).map(n => n.event_id))].sort(); }
   async noteStates(owner: string, eventId: string) { return [...this.noteRows.values()].filter(n => n.owner_uid === owner && n.event_id === eventId).map(n => n.sync_state); }
@@ -25,7 +50,7 @@ export class MemoryRepositories implements Repositories {
   private events = new Map<string, PersistedEvent>();
   private putTranscript(r: TranscriptRow) {
     const key = `${r.session_id}:${r.sequence}`, old = this.transcripts.get(key);
-    this.transcripts.set(key, structuredClone({ ...r, revision: old ? old.revision + Number(old.raw_text !== r.raw_text) : 0 }));
+    this.transcripts.set(key, structuredClone({ ...r, polished_text: old?.raw_text === r.raw_text ? old.polished_text ?? null : null, polished_level: old?.raw_text === r.raw_text ? old.polished_level ?? null : null, polish_error: old?.raw_text === r.raw_text ? old.polish_error ?? null : null, revision: old ? old.revision + Number(old.raw_text !== r.raw_text) : 0 }));
   }
   async upsertTranscript(r: TranscriptRow, observedSeq?: number) {
     if (observedSeq !== undefined && (this.sessionRows.get(r.session_id)?.last_event_seq ?? 0) > observedSeq) return;
@@ -42,7 +67,7 @@ export class MemoryRepositories implements Repositories {
     if (e.type === 'transcript_final' || e.type === 'transcript_revised') this.putTranscript(transcriptRow(e.session_id, e.data, e.ts));
     const language = languageEventRow(e); if (language) this.languages.set(`${e.session_id}:${e.seq}`, structuredClone(language));
     this.events.set(`${e.session_id}:${e.seq}`, structuredClone(e));
-    this.sessionRows.set(s.id, { ...s, last_event_seq: e.seq, ...(e.type === 'session_finalized' ? { status: 'finalized' as const, server_finalized_at: e.ts } : {}) });
+    this.sessionRows.set(s.id, { ...s, last_event_seq: e.seq, ...(e.type === 'session_finalized' ? { status: 'finalized' as const, server_finalized_at: e.ts, finalize_status: e.data.transcript_status } : {}) });
   }
   async setLastEventSeq(id: string, seq: number) { const s = this.sessionRows.get(id); if (s) this.sessionRows.set(id, { ...s, last_event_seq: Math.max(s.last_event_seq ?? 0, seq) }); }
   async resetLastEventSeq(id: string) {

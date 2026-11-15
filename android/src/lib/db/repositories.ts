@@ -1,3 +1,4 @@
+import type { AIJob, BriefDraft, PolishedChunk } from '../ai/types';
 import { normalizeSearch, escapeLike, type Note, type SyncState } from '../notes/model';
 import type { SQLiteDatabase, SQLiteBindValue } from 'expo-sqlite';
 import type { LanguageMode } from '@/types/models';
@@ -34,6 +35,7 @@ export interface ChunkRepo {
   resetUploading(owner: string): Promise<void>;
 }
 export interface TranscriptRow extends FinalData {
+  polished_text?: string | null; polished_level?: 'conservative' | 'polished' | null; polish_error?: string | null;
   session_id: string; revision: number; updated_at: string; failed_code: string | null;
 }
 export interface LanguageEventRow {
@@ -64,7 +66,16 @@ export interface NoteRepo {
   searchNotes(owner: string, q: string, limit: number): Promise<Note[]>;
   searchTranscripts(owner: string, q: string, limit: number): Promise<TranscriptSearchResult[]>;
 }
-export type Repositories = SessionRepo & ChunkRepo & TranscriptRepo & NoteRepo;
+export interface AIRepo {
+  putAIJob(job: AIJob): Promise<void>;
+  aiJobs(owner: string, eventId?: string): Promise<AIJob[]>;
+  finishAIJob(job: AIJob, draft?: BriefDraft): Promise<void>;
+  storePolished(sessionId: string, chunks: PolishedChunk[], originals: TranscriptRow[]): Promise<void>;
+  briefDrafts(owner: string, eventId: string): Promise<BriefDraft[]>;
+  putBriefDraft(draft: BriefDraft): Promise<void>;
+  deleteBriefDraft(owner: string, id: string): Promise<void>;
+}
+export type Repositories = SessionRepo & ChunkRepo & TranscriptRepo & NoteRepo & AIRepo;
 export function transcriptRow(sessionId: string, data: FinalData, ts = new Date().toISOString()): TranscriptRow {
   return { ...data, session_id: sessionId, revision: 0, updated_at: ts, failed_code: null };
 }
@@ -80,6 +91,9 @@ export const TRANSCRIPT_UPSERT = `INSERT INTO transcript_chunks
   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?) ON CONFLICT(session_id,sequence) DO UPDATE SET
   chunk_id=excluded.chunk_id,start_ms=excluded.start_ms,end_ms=excluded.end_ms,
   revision=transcript_chunks.revision + CASE WHEN transcript_chunks.raw_text != excluded.raw_text THEN 1 ELSE 0 END,
+  polished_text=CASE WHEN transcript_chunks.raw_text != excluded.raw_text THEN NULL ELSE transcript_chunks.polished_text END,
+  polished_level=CASE WHEN transcript_chunks.raw_text != excluded.raw_text THEN NULL ELSE transcript_chunks.polished_level END,
+  polish_error=CASE WHEN transcript_chunks.raw_text != excluded.raw_text THEN NULL ELSE transcript_chunks.polish_error END,
   raw_text=excluded.raw_text,segments_json=excluded.segments_json,detected_language=excluded.detected_language,
   language_confidence=excluded.language_confidence,language_source=excluded.language_source,
   language_uncertain=excluded.language_uncertain,no_speech=excluded.no_speech,failed_code=excluded.failed_code,updated_at=excluded.updated_at`;
@@ -102,6 +116,42 @@ async function update(db: SQLiteDatabase, table: string, key: string, id: string
 }
 export class SQLiteRepositories implements Repositories {
   constructor(private db: SQLiteDatabase) {}
+  async putAIJob(job: AIJob) {
+    const row = { ...job, session_ids: JSON.stringify(job.session_ids) };
+    await this.db.runAsync(`${insertSql('ai_jobs', row)} ON CONFLICT(job_id) DO UPDATE SET status=excluded.status,error_code=excluded.error_code,updated_at=excluded.updated_at`, values(row));
+  }
+  async aiJobs(owner: string, eventId?: string): Promise<AIJob[]> {
+    const rows = await this.db.getAllAsync<Omit<AIJob, 'session_ids'> & { session_ids: string }>(`SELECT * FROM ai_jobs WHERE owner_uid=?${eventId ? ' AND event_id=?' : ''} ORDER BY created_at DESC,job_id DESC`, eventId ? [owner,eventId] : [owner]);
+    return rows.map(r => ({ ...r, session_ids: JSON.parse(r.session_ids) }));
+  }
+  async finishAIJob(job: AIJob, draft?: BriefDraft) {
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      if (draft) {
+        const row = { ...draft, session_ids: JSON.stringify(draft.session_ids) };
+        await tx.runAsync(`${insertSql('brief_drafts', row)} ON CONFLICT(id) DO NOTHING`, values(row));
+      }
+      await tx.runAsync('UPDATE ai_jobs SET status=?,error_code=?,updated_at=? WHERE job_id=? AND owner_uid=?',job.status,job.error_code,job.updated_at,job.job_id,job.owner_uid);
+    });
+  }
+  async storePolished(sessionId: string, chunks: PolishedChunk[], originals: TranscriptRow[]) {
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      for (const c of chunks) {
+        const original = originals.find(r => r.sequence === c.sequence);
+        if (!original) continue;
+        await tx.runAsync('UPDATE transcript_chunks SET polished_text=?,polished_level=?,polish_error=? WHERE session_id=? AND sequence=? AND raw_text=? AND revision=?',c.polished_text,c.polished_level,c.polish_error,sessionId,c.sequence,original.raw_text,original.revision);
+      }
+    });
+  }
+  async briefDrafts(owner: string, eventId: string): Promise<BriefDraft[]> {
+    const rows = await this.db.getAllAsync<Omit<BriefDraft, 'session_ids'> & { session_ids: string }>('SELECT * FROM brief_drafts WHERE owner_uid=? AND event_id=? ORDER BY created_at DESC,id DESC',owner,eventId);
+    return rows.map(r => ({ ...r, session_ids: JSON.parse(r.session_ids) }));
+  }
+  async putBriefDraft(draft: BriefDraft) {
+    const row = { ...draft, session_ids: JSON.stringify(draft.session_ids) };
+    await this.db.runAsync(`${insertSql('brief_drafts', row)} ON CONFLICT(id) DO UPDATE SET edited_text=excluded.edited_text,status=excluded.status,updated_at=excluded.updated_at`,values(row));
+  }
+  async deleteBriefDraft(owner: string, id: string) { await this.db.runAsync("DELETE FROM brief_drafts WHERE id=? AND owner_uid=? AND status='draft'",id,owner); }
+
   async noteEventIds(owner: string) {
     return (await this.db.getAllAsync<{ event_id: string }>('SELECT DISTINCT event_id FROM notes WHERE owner_uid=? ORDER BY event_id', owner)).map(n => n.event_id);
   }
@@ -164,7 +214,7 @@ export class SQLiteRepositories implements Repositories {
       if (e.type === 'transcript_final' || e.type === 'transcript_revised') await upsertTranscript(tx, transcriptRow(e.session_id, e.data, e.ts));
       const language = languageEventRow(e); if (language) await appendLanguageEvent(tx, language);
       await tx.runAsync('INSERT INTO stream_events (session_id,seq,event_json) VALUES (?,?,?)', e.session_id, e.seq, JSON.stringify(e));
-      if (e.type === 'session_finalized') await tx.runAsync("UPDATE recording_sessions SET status='finalized',server_finalized_at=? WHERE id=?", e.ts, e.session_id);
+      if (e.type === 'session_finalized') await tx.runAsync("UPDATE recording_sessions SET status='finalized',server_finalized_at=?,finalize_status=? WHERE id=?", e.ts, e.data.transcript_status, e.session_id);
       await tx.runAsync('UPDATE recording_sessions SET last_event_seq=MAX(last_event_seq,?) WHERE id=?', e.seq, e.session_id);
     });
   }

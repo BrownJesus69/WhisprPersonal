@@ -57,6 +57,22 @@ service cloud.firestore {
           || (n.revision == r.revision && n.deviceId == r.deviceId
             && n.diff(r).affectedKeys().hasOnly(['updatedAt','baseRevision'])));
     }
+    function validBrief() {
+      let b = request.resource.data;
+      let keys = ['ownerId','type','status','provider','model','generatedText','finalText','edited',
+        'structuredBrief','incomplete','sessionIds','createdAt','updatedAt'];
+      return b.keys().hasAll(keys) && b.keys().hasOnly(keys)
+        && b.ownerId is string && b.ownerId == request.auth.uid
+        && b.type in ['summary','action_items','decisions','follow_ups','full']
+        && b.status == 'saved'
+        && b.provider in ['groq','sambanova','local_llm','none']
+        && (b.model == null || (b.model is string && b.model.size() <= 200))
+        && b.generatedText is string && b.generatedText.size() <= 100000
+        && b.finalText is string && b.finalText.size() >= 1 && b.finalText.size() <= 100000
+        && b.edited is bool && (b.structuredBrief == null || b.structuredBrief is map)
+        && b.incomplete is bool && b.sessionIds is list && b.sessionIds.size() <= 20
+        && b.createdAt is timestamp && b.updatedAt is timestamp && b.updatedAt == request.time;
+    }
     match /users/{uid} {
       allow read, delete: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid && safeFields();
@@ -82,8 +98,10 @@ service cloud.firestore {
       }
       match /briefs/{briefId} {
         allow read, delete: if isEventOwner(eventId);
-        allow create: if isEventOwner(eventId) && ownedCreate();
-        allow update: if isEventOwner(eventId) && ownedUpdate();
+        allow create: if isEventOwner(eventId) && validBrief();
+        allow update: if isEventOwner(eventId) && validBrief()
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.createdAt == resource.data.createdAt;
       }
     }
     // All unmatched documents are denied by default.

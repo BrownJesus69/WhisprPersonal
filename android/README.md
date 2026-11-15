@@ -37,8 +37,8 @@ microphone permission is requested only when Start is pressed after session cons
 A release APK builds locally with **every cache and temp file on E:**
 (`scripts/windows-build/build-apk.ps1`): Android SDK copy, Gradle home, npm cache, TEMP
 and `ANDROID_USER_HOME` all live in `E:\whispr-build-cache`. Verified result: `BUILD
-SUCCESSFUL in 7m 17s`, `app-release.apk` (45.6 MB, `arm64-v8a` only, debug-signed,
-`com.aditya.whisprpersonal` 0.6.0).
+SUCCESSFUL in 7m 27s` (2026-11-16), `app-release.apk` (45.7 MB, `arm64-v8a` only, debug-signed,
+`com.aditya.whisprpersonal` 0.8.0, versionCode 8).
 
 Three Windows problems had to be fixed:
 
@@ -312,3 +312,29 @@ cover pure decisions, real SQLite/memory semantics, fake offline sync, Firestore
 and accessible note controls. Run emulator rule tests using [the rules test instructions](../firebase/rules-tests/README.md).
 Deploy the reviewed Firestore rules with the release. Native-device airplane-mode, restart,
 font-scaling and screen-reader checks still belong in device QA.
+
+## Phase 8b: cleanup and reviewed briefs
+
+Finalized sessions offer **Clean up**, using the cleanup level selected in Settings. Switch
+between Raw and the labelled Polished tab; rejected or absent cleanup falls back to raw
+with **Not cleaned**. Event **Briefs** lets you select finalized sessions, choose a brief
+type, optionally include owner notes or cleaned text, and explicitly accept incomplete
+transcripts. Review/edit the generated draft before saving. Drafts and pending AI jobs
+survive app restart. Saved briefs have an offline Firestore viewer and a retained phone copy.
+
+Providers are disabled until configured **on the laptop**: configure an enabled provider's
+key and model, or the local LLM URL and model, using the existing server setup instructions.
+See [server setup](../docs/setup.md) and [the event runbook](../docs/event-runbook.md).
+The app holds no provider keys and assumes no provider model ids or quotas. Refresh
+provider status in Briefs after changing laptop configuration. A local-only event requires
+an eligible local model. With no eligible provider the calm unavailable message is expected;
+raw transcription and notes continue to work.
+
+SQLite v4 keeps polish separate and clears it on raw revisions. AI calls use the same
+owner-guarded authentication as uploads. Brief saves queue Firestore writes without waiting
+for internet and retain original generated text alongside the owner's reviewed version.
+Deploy the updated brief rules with this release. Offline tests cover response validation,
+job backoff/restart, SQLite/memory parity, Firestore serialization and UI consent/editing.
+Run the existing typecheck, lint and Jest commands plus the local rules emulator tests.
+Native-device layout, large-font, screen-reader and airplane-mode/restart QA remain part
+of release verification.

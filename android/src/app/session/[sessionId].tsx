@@ -1,3 +1,4 @@
+import { CleanupControl } from '@/components/CleanupControl';
 import { useEffect, useState } from 'react';
 import { Platform, ScrollView, Text, ToastAndroid, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -33,6 +34,7 @@ export default function SessionScreen() {
   const uid = useAuthStore(s => s.user?.uid);
   const connection = useConnectionStore(s => s.status);
   const recording = useRecordingStore();
+  const [tab, setTab] = useState<'raw' | 'polished'>('raw');
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
   const client = useQueryClient();
@@ -42,7 +44,7 @@ export default function SessionScreen() {
       const repo = await repositories();
       const session = await repo.session(sessionId);
       if (!session || session.owner_uid !== uid) throw new Error('Session unavailable');
-      return { session, chunks: await repo.chunks(sessionId) };
+      return { session, chunks: await repo.chunks(sessionId), transcript: await repo.transcript(sessionId) };
     }
   });
   const session = query.data?.session;
@@ -99,12 +101,13 @@ export default function SessionScreen() {
         await liveController.setOverride(sessionId, mode);
         if (Platform.OS === 'android') ToastAndroid.show('Applies from the next chunk', ToastAndroid.SHORT);
       })} />}
+      <CleanupControl session={session} privacy={event.data?.privacyMode} />
       </ScrollView>
-      <TranscriptTabs />
+      <TranscriptTabs selected={tab} onSelect={setTab} />
       {!!live.model.language.timeline.length && <ScrollView horizontal style={{ flexGrow: 0 }} accessibilityLabel="Language timeline">
         <Text selectable style={{ ...typography.label, color: t.muted }}>{live.model.language.timeline.map(s => `${languageName(s.language)} (${s.fromSequence + 1}–${s.toSequence + 1})`).join(' → ')}</Text>
       </ScrollView>}
-      <TranscriptList onAddNote={row => act(async () => {
+      <TranscriptList polished={tab === 'polished'} stored={query.data?.transcript} onAddNote={row => act(async () => {
         await createNote(session.event_id, { text: row.text, source: 'transcript', timestampMs: row.startMs, sessionId, sequence: row.sequence, language: row.language ?? null });
         if (Platform.OS === 'android') ToastAndroid.show('Added to notes', ToastAndroid.SHORT);
       })} model={live.model} chunkStarts={Object.fromEntries((query.data?.chunks ?? []).map(c => [c.sequence, c.start_ms]))} />

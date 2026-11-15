@@ -33,6 +33,7 @@ export default function EventDetail() {
     {!isPending && !error && !event && <Banner message="Event not found" />}
     {event && <>
       <Button label={`Notes (${count.data?.filter(n => !n.deleted).length ?? 0})`} onPress={() => router.push({ pathname: '/events/[eventId]/notes', params: { eventId } })} />
+      <Button label="Briefs" onPress={() => router.push({ pathname: '/events/[eventId]/brief', params: { eventId } })} />
       <StatusBadge status={event.status} />
       <Card>
         <KeyValueRow label="Description" value={event.description || '—'} />

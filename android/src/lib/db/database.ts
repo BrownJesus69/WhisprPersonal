@@ -77,5 +77,25 @@ async function open() {
       PRAGMA user_version = 3;
     `);
   });
+  if ((version?.user_version ?? 0) < 4) await db.withExclusiveTransactionAsync(async tx => {
+    await tx.execAsync(`
+      ALTER TABLE transcript_chunks ADD COLUMN polished_text TEXT;
+      ALTER TABLE transcript_chunks ADD COLUMN polished_level TEXT;
+      ALTER TABLE transcript_chunks ADD COLUMN polish_error TEXT;
+      CREATE TABLE ai_jobs (
+        job_id TEXT PRIMARY KEY, owner_uid TEXT NOT NULL, event_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK(kind IN ('cleanup','brief')), session_ids TEXT NOT NULL,
+        status TEXT NOT NULL, error_code TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE brief_drafts (
+        id TEXT PRIMARY KEY, owner_uid TEXT NOT NULL, event_id TEXT NOT NULL, job_id TEXT,
+        brief_type TEXT NOT NULL, provider TEXT, model TEXT, generated_text TEXT NOT NULL,
+        edited_text TEXT NOT NULL, structured_json TEXT, warning TEXT, incomplete INTEGER NOT NULL,
+        session_ids TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('draft','saved')),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      PRAGMA user_version = 4;
+    `);
+  });
   return db;
 }

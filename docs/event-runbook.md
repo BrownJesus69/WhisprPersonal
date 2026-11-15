@@ -113,3 +113,38 @@ Enter two or more characters and pause briefly. Each section shows up to 50 newe
 note results open event notes, and transcript results open their recording session. Event
 notes also have their own search box. Kannada, Tamil and Hindi combining marks are retained;
 percent, underscore and backslash are searched as literal characters.
+
+## Cleanup and brief review on the phone (Phase 8b)
+
+After a recording session is **finalized**, choose Conservative or Polished cleanup in
+Settings, open the session, and tap **Clean up**. Its queued/running status appears here;
+completion reports cleaned parts and parts kept as raw. Open **Polished** to review the
+labelled AI-cleaned text. Parts without accepted cleanup show the original text and
+**Not cleaned**. **Raw** always shows the original transcript. Cleanup is explicit and
+never runs during recording.
+
+For an event brief:
+
+1. Open the event and tap **Briefs**. Finalized local sessions are selected by default;
+   choose at most 20 and choose Summary, Action items, Decisions, Follow-ups, or Full brief.
+2. **Include my notes** sends the newest 200 non-deleted event notes. Turn it off to use
+   only speech. **Use cleaned text where available** is off by default.
+3. If any selected transcript is partial or its completeness is unknown, review the warning
+   and explicitly check **Generate from incomplete transcript** before generating.
+4. Tap **Generate**. You can leave the screen while the laptop works. The app resumes
+   polling pending jobs after restart; it never automatically resubmits paid work.
+5. Review the draft, its provider/model label, and any incomplete/unstructured warning.
+   Edit the text, then **Save**, or **Discard** the draft. Draft text and edits stay on the
+   phone across restarts. Generated output is retained separately from the saved edit.
+6. Open an entry under **Saved briefs** to read it. Saving queues Firestore sync without
+   waiting for internet. Cached briefs and the phone's saved copies remain readable offline.
+   A rejected cloud write leaves the phone copy available; use **Retry cloud save** after
+   resolving account/rules/connectivity issues.
+
+**Cloud AI unavailable; raw transcript preserved.** means no cloud or local provider is
+currently eligible. It is normal with the default laptop configuration. Recording, raw
+transcription and notes still work. Configure providers on the laptop, then refresh provider
+status. For a `local_only` event without an available local model, the app says **Cloud AI
+is off for this event**. Changing this requires an intentional event privacy decision.
+**The laptop restarted; request it again.** means the server interrupted a pending AI job;
+review the session and submit a new request yourself.

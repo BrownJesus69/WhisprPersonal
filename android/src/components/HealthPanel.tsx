@@ -1,3 +1,4 @@
+import { providerStatus } from '@/lib/ai/messages';
 import type { Health } from '@/lib/server/types';
 import { Card } from './Card';
 import { KeyValueRow } from './KeyValueRow';
@@ -16,8 +17,9 @@ export function HealthPanel({ health: h }: {
     'Queue': `${h.queue.status} · ${h.queue.depth}/${h.queue.max_depth}`,
     'Firebase': h.firebase.status,
     'Offline passes': `${h.auth.grants.enabled ? 'Enabled' : 'Disabled'} · ${h.auth.grants.ttl_hours} h`,
-    'Groq configured': h.providers.groq.configured ? 'Yes' : 'No',
-    'SambaNova configured': h.providers.sambanova.configured ? 'Yes' : 'No',
+    'Groq': providerStatus(h.providers.groq.status),
+    'SambaNova': providerStatus(h.providers.sambanova.status),
+    'Local model': providerStatus(h.providers.local_llm.status),
     'Supported languages': h.languages.supported.join(', ')
   };
   return <Card>

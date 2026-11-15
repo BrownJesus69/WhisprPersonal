@@ -1,9 +1,7 @@
 import { AppState } from 'react-native';
 import { addNetworkStateListener } from 'expo-network';
 import { ServerError, ServerClient } from '@/lib/server/client';
-import { auth as firebaseAuth } from '@/lib/firebase/auth';
-import { credentials } from '@/lib/server/credentials';
-import { createTokenManager } from '@/lib/server/tokenManager';
+import { authedClient } from '@/lib/server/authedClient';
 import type { ChunkUploadResponse, SessionResponse, FinalizeResponse } from '@/lib/server/types';
 import type { Repositories, LocalChunk, LocalSession } from '@/lib/db/repositories';
 import { repositories, transcriptRow } from '@/lib/db/repositories';
@@ -191,7 +189,7 @@ export class UploadService {
           await this.ensureSession(s);
           const result = await this.d.client.post<FinalizeResponse>(`${this.path(s)}/finalize`, { expected_chunk_count: s.next_sequence, force: false });
           const finalized = result.status === 'finalized';
-          await this.d.repo.updateSession(s.id, { status: finalized ? 'finalized' : 'finalizing', expected_chunk_count: s.next_sequence, finalize_status: result.status, last_error: null });
+          await this.d.repo.updateSession(s.id, { status: finalized ? 'finalized' : 'finalizing', expected_chunk_count: s.next_sequence, finalize_status: result.transcript_status ?? result.status, last_error: null });
           this.sessionRetry.set(s.id, this.now() + 10000);
           if (finalized) this.d.eventStatus(s.event_id, 'completed');
         }
@@ -231,15 +229,8 @@ export const uploadService = {
     if (!url) return;
     const repo = await repositories();
     if (token !== generation) return;
-    const tokens = createTokenManager(url);
-    const sameAccount = () => firebaseAuth.current()?.uid === owner && useAuthStore.getState().user?.uid === owner;
-    const client = new ServerClient({ baseUrl: url, getServerKey: credentials.getServerKey,
-      getBearer: async () => {
-        if (!sameAccount()) throw new ServerError(0, 'renew_required', 'Sign in to the recording account');
-        const bearer = await tokens.getBearer();
-        if (!sameAccount()) throw new ServerError(0, 'renew_required', 'Sign in to the recording account');
-        return bearer;
-      }, onAuthExpired: tokens.onAuthExpired });
+    const client = authedClient(owner);
+    if (!client) return;
     service = new UploadService({ repo, owner, client,
       deleteAfter: () => useSettingsStore.getState().deleteLocalAudioAfterTranscription,
       removeFile: deleteAudio, eventStatus: updateEventStatus,

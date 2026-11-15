@@ -1,6 +1,7 @@
 export interface ProviderHealth {
   configured: boolean;
-  status: 'not_configured' | 'configured_unchecked';
+  status: 'not_configured' | 'configured_unchecked' | 'ready' | 'degraded' | 'circuit_open' | 'auth_failed';
+  model?: string | null; last_error_kind?: string | null;
 }
 
 export interface ChunkUploadResponse {
@@ -11,7 +12,7 @@ export interface SessionResponse {
   chunks: ({ chunk_id: string; sequence: number; status: 'queued' | 'processing' | 'done' | 'failed'; error_code?: string | null } & Partial<import('../live/events').FinalData>)[];
   last_event_seq?: number;
 }
-export interface FinalizeResponse { status: string; missing_sequences?: number[]; pending?: number }
+export interface FinalizeResponse { status: string; transcript_status?: string; missing_sequences?: number[]; pending?: number }
 
 export interface Health {
   status: 'ok' | 'degraded';
