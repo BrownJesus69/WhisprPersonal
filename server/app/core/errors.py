@@ -25,6 +25,10 @@ class ErrorCode(StrEnum):
     missing_auth_token = "missing_auth_token"  # noqa: S105 -- public error identifier
     invalid_auth_token = "invalid_auth_token"  # noqa: S105 -- public error identifier
     auth_not_configured = "auth_not_configured"
+    auth_token_expired = "auth_token_expired"  # noqa: S105 -- public error identifier
+    auth_unavailable = "auth_unavailable"
+    account_not_allowed = "account_not_allowed"
+    firestore_unavailable = "firestore_unavailable"
     forbidden = "forbidden"
     network_not_allowed = "network_not_allowed"
     payload_too_large = "payload_too_large"
@@ -47,6 +51,10 @@ ERROR_STATUSES: dict[ErrorCode, int] = {
     ErrorCode.missing_auth_token: 401,
     ErrorCode.invalid_auth_token: 401,
     ErrorCode.auth_not_configured: 503,
+    ErrorCode.auth_token_expired: 401,
+    ErrorCode.auth_unavailable: 503,
+    ErrorCode.account_not_allowed: 403,
+    ErrorCode.firestore_unavailable: 503,
     ErrorCode.forbidden: 403,
     ErrorCode.network_not_allowed: 403,
     ErrorCode.payload_too_large: 413,

@@ -1,0 +1,62 @@
+// Admin SDK (laptop server) bypasses rules; security/ownership.py enforces ownership.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function safeFields() {
+      return !request.resource.data.keys().hasAny(
+        ['apiKey', 'serverKey', 'privateKey', 'secret', 'token']);
+    }
+    function isEventOwner(eventId) {
+      return signedIn() && get(/databases/$(database)/documents/events/$(eventId)).data.ownerId == request.auth.uid;
+    }
+    function ownedCreate() {
+      return request.resource.data.ownerId == request.auth.uid && safeFields();
+    }
+    function ownedUpdate() {
+      return request.resource.data.ownerId == resource.data.ownerId && safeFields();
+    }
+    function validEvent() {
+      return request.resource.data.keys().hasAll(['ownerId', 'title', 'status', 'createdAt', 'privacyMode'])
+        && request.resource.data.status in ['draft', 'active', 'processing', 'completed', 'failed']
+        && request.resource.data.privacyMode in ['local_only', 'cloud_ai']
+        && request.resource.data.title is string && request.resource.data.title.size() <= 200;
+    }
+    function validChunkText() {
+      return (!('rawText' in request.resource.data) ||
+          (request.resource.data.rawText is string && request.resource.data.rawText.size() <= 20000))
+        && (!('polishedText' in request.resource.data) ||
+          (request.resource.data.polishedText is string && request.resource.data.polishedText.size() <= 20000));
+    }
+    match /users/{uid} {
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid && safeFields();
+    }
+    match /events/{eventId} {
+      allow read, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if signedIn() && ownedCreate() && validEvent();
+      allow update: if signedIn() && resource.data.ownerId == request.auth.uid
+        && ownedUpdate() && validEvent();
+      match /sessions/{sessionId} {
+        allow read, delete: if isEventOwner(eventId);
+        allow create: if isEventOwner(eventId) && ownedCreate();
+        allow update: if isEventOwner(eventId) && ownedUpdate();
+        match /chunks/{chunkId} {
+          allow read, delete: if isEventOwner(eventId);
+          allow create, update: if isEventOwner(eventId) && safeFields() && validChunkText();
+        }
+      }
+      match /notes/{noteId} {
+        allow read, delete: if isEventOwner(eventId);
+        allow create: if isEventOwner(eventId) && ownedCreate();
+        allow update: if isEventOwner(eventId) && ownedUpdate();
+      }
+      match /briefs/{briefId} {
+        allow read, delete: if isEventOwner(eventId);
+        allow create: if isEventOwner(eventId) && ownedCreate();
+        allow update: if isEventOwner(eventId) && ownedUpdate();
+      }
+    }
+    // All unmatched documents are denied by default.
+  }
+}

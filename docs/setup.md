@@ -5,7 +5,8 @@ or Docker Desktop with Compose v2. Windows launchers support Windows PowerShell 
 Linux/macOS launchers need Bash and curl, plus Python 3 or OpenSSL for secret generation.
 Windows Docker Desktop must use Linux containers. NVIDIA GPU use additionally requires
 a compatible driver and NVIDIA container support; the base Compose file needs no GPU.
-No Firebase SDK, Whisper model, or provider connection is required for Phase 1.
+Firebase Admin is included in the server dependencies. Startup needs no network connection,
+Whisper model, or configured remote provider. Firebase credentials are optional.
 
 ## Docker quick start
 
@@ -17,7 +18,8 @@ On first launch only, the script copies `.env.example` to `server/.env`, generat
 secret, and prints it once with a private-entry reminder. Keep that value privately; it
 is not in the QR code. Existing server `.env` files are never rewritten. If one JSON file
 with a safe filename exists in `../secrets/`, the launcher records its container path but
-does not open it. Phase 1 only checks file existence. The root `.env` is never used.
+does not open it. The server reads that service account locally during Firebase initialization.
+The root `.env` is never used by the launchers.
 
 The script creates models/data directories, selects the NVIDIA override when supported,
 builds and starts the service, polls health for up to 180 seconds, runs selftest, prints LAN
@@ -64,7 +66,7 @@ bind `--host 0.0.0.0` and configure the firewall. Always use `--no-proxy-headers
 access so the application sees the real socket peer. Set a shared secret yourself via
 your environment or a private server `.env` if you need to test auth responses. You can
 generate one with `python -m app.cli gen-secret`. Never put credentials into commands or
-URLs you share. Real diagnostics remain disabled until Phase 2.
+URLs you share. Diagnostics require a configured Firebase service and a valid ID token.
 
 Visit `/health` and `/docs`, then run `python -m app.cli selftest` from the same environment.
 Expect HTTP 200, `degraded`, `not_loaded`, `not_started`. This is intentional. GPU probing
@@ -88,8 +90,13 @@ remain `not_configured`; configured providers report `configured_unchecked` with
 | PORT | 8000 | Application configuration; pass Uvicorn `--port` separately for non-Docker |
 | ENABLE_API_DOCS | true | Enables /docs, /redoc, /openapi.json |
 | SERVER_SHARED_SECRET | empty | SecretStr, at least 32 characters when set |
-| FIREBASE_CREDENTIALS_PATH | empty | Local file or `/run/secrets/whisprpersonal/<file>.json`; only existence checked |
-| FIREBASE_PROJECT_ID | empty | Reserved for Phase 2 |
+| FIREBASE_CREDENTIALS_PATH | empty | Local file or `/run/secrets/whisprpersonal/<file>.json`; initialized locally at startup |
+| FIREBASE_PROJECT_ID | empty | Optional Firebase app project override |
+| FIREBASE_CHECK_REVOKED | false | True adds a network call per protected request |
+| FIREBASE_CLOCK_SKEW_S | 5 | Token clock tolerance, integer 0-60 seconds |
+| FIREBASE_DATABASE_ID | empty | Empty selects `(default)` |
+| AUTH_ALLOWED_UIDS | empty | Comma-separated alphanumeric uids, each 1-128 characters |
+| AUTH_ALLOWED_EMAILS | empty | Comma-separated emails; case-insensitive, verified claims only |
 | GROQ_API_KEY | empty | Optional SecretStr |
 | GROQ_BASE_URL | https://api.groq.com/openai/v1 | Reserved provider endpoint |
 | GROQ_MODEL | empty | Choose a model your account can access; [provider docs](https://console.groq.com/docs) |
@@ -116,7 +123,7 @@ remain `not_configured`; configured providers report `configured_unchecked` with
 | MAX_JSON_BODY_BYTES | 1048576 | All other HTTP body ceiling |
 | RATE_LIMIT_GLOBAL_PER_MINUTE | 1200 | Global token bucket rate and burst |
 | RATE_LIMIT_PER_IP_PER_MINUTE | 300 | Per socket peer IP rate and burst |
-| RATE_LIMIT_PER_USER_PER_MINUTE | 240 | Verified uid dependency for Phase 2+ |
+| RATE_LIMIT_PER_USER_PER_MINUTE | 240 | Verified uid limit for protected routes |
 | ALLOWED_CLIENT_NETWORKS | See below | Comma-separated CIDRs; invalid CIDRs reject startup |
 | TRUST_PROXY_HEADERS | false | Explicit X-Forwarded-For trust; requires controlled proxy |
 | CORS_ALLOWED_ORIGINS | empty | Comma-separated explicit origins; wildcard rejected |
@@ -166,5 +173,35 @@ requested pins instead of installing an additional transport dependency.
 If Docker health times out, inspect `docker compose logs --tail 50 server` privately.
 Check the server `.env` values without sharing them, bind/port, network allowlist, mount
 permissions and Docker status. An invalid secret/CIDR/origin causes configuration failure;
-an unset secret permits health but protected routes fail closed. `not_initialized` Firebase,
-disabled token verification, and unloaded models are expected Phase 1 states.
+an unset secret permits health but protected routes fail closed. `not_configured` Firebase and
+disabled token verification are expected without credentials;
+unloaded models remain expected until Phase 3.
+
+
+## Firebase identity and Firestore
+
+Enable the intended sign-in provider(s) in the Firebase console; provider selection and
+phone sign-in UI are decided in Phase 4. Store the service account locally under git-ignored
+`secrets/`. Never include it in an app bundle or commit it. For non-Docker use, set
+`FIREBASE_CREDENTIALS_PATH` to its absolute local path in your private environment or server
+configuration. Docker uses the existing read-only secret mount. Startup parses the local
+service account and initializes a named Admin app without contacting Firebase.
+
+With no path, health reports `not_configured`. A missing or invalid file reports `error`
+with a safe reason; token verification remains disabled and protected requests fail closed.
+`ready` indicates local initialization, not verified connectivity to Auth or Firestore.
+
+Deploy rules and indexes using the instructions in [firebase/README.md](../firebase/README.md):
+
+```sh
+firebase deploy --only firestore:rules,firestore:indexes --project <your-project-id>
+```
+
+Initially empty allowlists allow any verified user of this Firebase project who has the
+server key; startup warns about this. After your first sign-in, call `/api/v1/auth/check`,
+then set `AUTH_ALLOWED_UIDS` to your own uid and restart. Uids must be alphanumeric, 1-128
+characters. Alternatively, `AUTH_ALLOWED_EMAILS` matches only verified email claims. When
+either list is set, a match in either list grants access. Diagnostics show counts only.
+`FIREBASE_CHECK_REVOKED=true` checks revoked/disabled accounts with an extra network call
+on every protected request; the default is false. See the offline constraint in
+[security.md](security.md) before planning events without internet.

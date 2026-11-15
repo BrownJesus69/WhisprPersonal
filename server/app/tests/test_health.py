@@ -33,3 +33,28 @@ def test_provider_config_and_no_leaks(make_settings: Any, tmp_path: Path) -> Non
     settings = make_settings(groq_api_key=key)
     with TestClient(create_app(settings), client=("127.0.0.1", 1)) as client:
         assert client.get("/health").json()["providers"]["groq"]["status"] == "not_configured"
+
+
+def test_firebase_default(client: TestClient) -> None:
+    body = client.get("/health").json()
+    assert body["firebase"]["status"] == "not_configured"
+    assert body["auth"]["token_verification"] == "disabled"  # noqa: S105 -- public status
+
+
+def test_firebase_ready(make_settings: Any, fake_firebase: Any) -> None:
+    settings = make_settings(auth_allowed_uids=["testuser"], firebase_check_revoked=True)
+    with TestClient(
+        create_app(settings, firebase_service=fake_firebase), client=("127.0.0.1", 1)
+    ) as client:
+        response = client.get("/health")
+    assert response.json()["firebase"] == {
+        "credentials_present": False,
+        "status": "ready",
+        "error_reason": None,
+        "project_id_set": True,
+    }
+    assert response.json()["auth"]["token_verification"] == "firebase"  # noqa: S105 -- public status
+    assert response.json()["auth"]["allowlist_enabled"] is True
+    assert response.json()["auth"]["check_revoked"] is True
+    assert "testuser" not in response.text
+    assert fake_firebase.project_id not in response.text

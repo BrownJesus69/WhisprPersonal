@@ -1,5 +1,6 @@
 """Environment configuration; no credentials are opened or initialized here."""
 
+import re
 from functools import lru_cache
 from ipaddress import ip_network
 from pathlib import Path
@@ -26,6 +27,11 @@ class Settings(BaseSettings):
     server_shared_secret: SecretStr | None = Field(None, repr=False)
     firebase_credentials_path: Path | None = Field(None, repr=False)
     firebase_project_id: str | None = None
+    firebase_check_revoked: bool = False
+    firebase_clock_skew_s: int = Field(5, ge=0, le=60)
+    firebase_database_id: str | None = None
+    auth_allowed_uids: Annotated[list[str], NoDecode] = Field(default_factory=list, repr=False)
+    auth_allowed_emails: Annotated[list[str], NoDecode] = Field(default_factory=list, repr=False)
     groq_api_key: SecretStr | None = Field(None, repr=False)
     groq_base_url: str = Field("https://api.groq.com/openai/v1", repr=False)
     groq_model: str | None = None
@@ -88,6 +94,7 @@ class Settings(BaseSettings):
         "server_shared_secret",
         "firebase_credentials_path",
         "firebase_project_id",
+        "firebase_database_id",
         "groq_api_key",
         "groq_model",
         "groq_max_rpm",
@@ -109,12 +116,30 @@ class Settings(BaseSettings):
             raise ValueError("Shared secret must contain at least 32 characters")
         return value
 
-    @field_validator("allowed_client_networks", "cors_allowed_origins", mode="before")
+    @field_validator(
+        "allowed_client_networks",
+        "cors_allowed_origins",
+        "auth_allowed_uids",
+        "auth_allowed_emails",
+        mode="before",
+    )
     @classmethod
     def comma_list(cls, value: Any) -> Any:
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("auth_allowed_uids")
+    @classmethod
+    def valid_uids(cls, values: list[str]) -> list[str]:
+        if any(re.fullmatch(r"[A-Za-z0-9]{1,128}", value) is None for value in values):
+            raise ValueError("Invalid allowed uid")
+        return values
+
+    @field_validator("auth_allowed_emails")
+    @classmethod
+    def normalized_emails(cls, values: list[str]) -> list[str]:
+        return [value.lower() for value in values]
 
     @field_validator("allowed_client_networks")
     @classmethod
@@ -153,7 +178,9 @@ class Settings(BaseSettings):
         result: dict[str, Any] = {}
         for name in type(self).model_fields:
             value = getattr(self, name)
-            if name in {"models_dir", "data_dir", "firebase_credentials_path"} or name.endswith(
+            if name in {"auth_allowed_uids", "auth_allowed_emails"}:
+                result[f"{name}_count"] = len(value)
+            elif name in {"models_dir", "data_dir", "firebase_credentials_path"} or name.endswith(
                 ("_api_key", "_shared_secret")
             ):
                 result[f"{name}_set"] = bool(value)

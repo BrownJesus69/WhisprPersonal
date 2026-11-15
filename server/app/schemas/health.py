@@ -1,4 +1,4 @@
-"""Phase 1 status contracts; configured providers have not been contacted."""
+"""Status contracts; health does not contact remote services."""
 
 from datetime import datetime
 from typing import Literal
@@ -40,12 +40,17 @@ class ProvidersInfo(BaseModel):
 
 class FirebaseInfo(BaseModel):
     credentials_present: bool
-    status: Literal["not_initialized"] = "not_initialized"
+    status: Literal["not_configured", "ready", "error"]
+    error_reason: str | None = None
+    project_id_set: bool
 
 
 class AuthInfo(BaseModel):
     shared_secret_configured: bool
-    token_verification: Literal["disabled"] = "disabled"  # noqa: S105 -- public status
+    token_verification: Literal["disabled", "firebase"] = "disabled"  # noqa: S105 -- public status
+
+    allowlist_enabled: bool
+    check_revoked: bool
 
 
 class FeaturesInfo(BaseModel):

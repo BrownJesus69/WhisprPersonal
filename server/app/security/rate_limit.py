@@ -93,3 +93,7 @@ async def per_user_rate_limit(
     if not decision.allowed:
         raise rate_error(decision)
     return user
+
+
+# One dependency resolves authentication once and then applies the user bucket.
+authenticated_user = per_user_rate_limit

@@ -57,8 +57,20 @@ def build_health(request: Request) -> HealthResponse:
             sambanova=provider(settings.sambanova_configured),
             local_llm=provider(settings.local_llm_configured),
         ),
-        firebase=FirebaseInfo(credentials_present=settings.firebase_credentials_present),
-        auth=AuthInfo(shared_secret_configured=bool(settings.server_shared_secret)),
+        firebase=FirebaseInfo(
+            credentials_present=settings.firebase_credentials_present,
+            status=request.app.state.firebase.status,
+            error_reason=request.app.state.firebase.error_reason,
+            project_id_set=bool(request.app.state.firebase.project_id),
+        ),
+        auth=AuthInfo(
+            shared_secret_configured=bool(settings.server_shared_secret),
+            token_verification="firebase"
+            if request.app.state.firebase.status == "ready"
+            else "disabled",
+            allowlist_enabled=bool(settings.auth_allowed_uids or settings.auth_allowed_emails),
+            check_revoked=settings.firebase_check_revoked,
+        ),
         features=FeaturesInfo(
             **{name: getattr(settings, f"feature_{name}") for name in FeaturesInfo.model_fields}
         ),

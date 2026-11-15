@@ -87,3 +87,23 @@ def app(settings: Settings) -> FastAPI:
 def client(app: FastAPI) -> Iterator[TestClient]:
     with TestClient(app, client=("127.0.0.1", 50000)) as test_client:
         yield test_client
+
+
+class FakeFirebaseService:
+    """Ready local service; never opens files or calls SDK initialization."""
+
+    status = "ready"
+    error_reason = None
+    project_id = "test-project"
+    app = object()
+
+    def initialize(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+@pytest.fixture
+def fake_firebase() -> FakeFirebaseService:
+    return FakeFirebaseService()

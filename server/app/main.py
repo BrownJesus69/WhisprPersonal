@@ -1,5 +1,6 @@
-"""Application factory; inference and identity initialization arrive in later phases."""
+"""Application factory with local Firebase initialization; inference arrives in Phase 3."""
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,17 +14,24 @@ from app.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.request_context import RequestContextMiddleware
-from app.routers import diagnostics, health
-from app.security.auth import DisabledTokenVerifier
+from app.routers import auth, diagnostics, health
+from app.security.auth import DisabledTokenVerifier, TokenVerifier
 from app.security.body_limit import BodyLimitMiddleware
+from app.security.firebase_verifier import FirebaseTokenVerifier
 from app.security.headers import SecurityHeadersMiddleware
 from app.security.network import NetworkMiddleware
+from app.security.ownership import DisabledEventRepository, FirestoreEventRepository
 from app.security.rate_limit import RateLimitMiddleware, TokenBucketLimiter
+from app.services.firebase import FirebaseService
 from app.services.gpu import detect_gpu
 from app.services.state import ServerState
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    firebase_service: FirebaseService | None = None,
+    token_verifier: TokenVerifier | None = None,
+) -> FastAPI:
     settings = settings if settings is not None else get_settings()
 
     @asynccontextmanager
@@ -39,13 +47,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             gpu=await detect_gpu(settings),
             model_name=settings.whisper_model,
         )
-        app.state.token_verifier = DisabledTokenVerifier()
+        service = firebase_service if firebase_service is not None else FirebaseService(settings)
+        await asyncio.to_thread(service.initialize)
+        app.state.firebase = service
+        app.state.token_verifier = (
+            token_verifier
+            if token_verifier is not None
+            else (
+                FirebaseTokenVerifier(service, settings)
+                if service.status == "ready"
+                else DisabledTokenVerifier()
+            )
+        )
+        app.state.event_repository = (
+            FirestoreEventRepository(service)
+            if service.status == "ready"
+            else DisabledEventRepository()
+        )
+        if (
+            service.status == "ready"
+            and not settings.auth_allowed_uids
+            and not settings.auth_allowed_emails
+        ):
+            logger.warning(
+                "Any user of this Firebase project with the server key can use this server",
+                extra={"event": "auth_allowlist_empty"},
+            )
         app.state.global_limiter = TokenBucketLimiter(settings.rate_limit_global_per_minute)
         app.state.ip_limiter = TokenBucketLimiter(settings.rate_limit_per_ip_per_minute)
         app.state.user_limiter = TokenBucketLimiter(settings.rate_limit_per_user_per_minute)
         try:
             yield
         finally:
+            await asyncio.to_thread(service.close)
             logger.info("Server stopping", extra={"event": "shutdown"})
 
     app = FastAPI(
@@ -57,6 +91,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json" if settings.enable_api_docs else None,
     )
     register_exception_handlers(app)
+    app.include_router(auth.router)
     app.include_router(health.router)
     app.include_router(diagnostics.router)
     # add_middleware prepends: register from innermost to outermost.

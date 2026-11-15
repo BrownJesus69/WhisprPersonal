@@ -1,4 +1,4 @@
-# API reference — Phase 1
+# API reference - Phase 2
 
 Default base URL: `http://127.0.0.1:8000`. Interactive docs are at `/docs`, alternative docs
 at `/redoc`, and the schema at `/openapi.json` when `ENABLE_API_DOCS=true`. These surfaces
@@ -7,7 +7,8 @@ them. Responses use UTC timestamps and JSON.
 
 Protected requests require `X-WhisprPersonal-Server-Key` and `Authorization: Bearer <ID token>`.
 The Bearer scheme is case insensitive; empty or malformed tokens count as missing.
-The shared key is always checked first. No real tokens can pass Phase 1's disabled verifier.
+The shared key is always checked first. Firebase Admin verifies the ID token next, then enforces the optional account allowlist.
+Each protected request verifies its token exactly once, followed by its per-user rate limit.
 Use an optional `X-Request-ID` matching `[A-Za-z0-9-]{8,64}`; otherwise a UUID hex ID is
 generated. HTTP responses echo the effective ID, including middleware errors.
 
@@ -26,11 +27,11 @@ both model status is `ready` and queue status is `running`.
 | gpu | `available` (boolean/null), `name` (string/null), `vram_total_mb` (integer/null), `detection` (`ctranslate2/nvidia-smi/disabled/unavailable`) |
 | queue | `status` (`not_started/running/stopping`), `depth`, `max_depth`, `workers` |
 | providers | `groq`, `sambanova`, `local_llm`, each `{configured: boolean, status: not_configured/configured_unchecked}` |
-| firebase | `{credentials_present: boolean, status: not_initialized}`; existence check only |
-| auth | `{shared_secret_configured: boolean, token_verification: disabled}` |
+| firebase | `{credentials_present: boolean, status: not_configured/ready/error, error_reason: null/credentials_missing/credentials_invalid/init_failed, project_id_set: boolean}` |
+| auth | `{shared_secret_configured: boolean, token_verification: disabled/firebase, allowlist_enabled: boolean, check_revoked: boolean}` |
 | features | boolean `translation`, `calendar`, `drive`, `gmail`, `app_check`, `fcm`, `web_search`, `cloud_whisper` |
 
-Typical Phase 1 values are `degraded`, `not_loaded`, `not_started`, and unconfigured
+Typical startup values are `degraded`, `not_loaded`, `not_started`, and unconfigured
 providers. Configured providers are never contacted here. Names in the model object are
 the configured Whisper names, not a claim that model files exist. No secret or filesystem
 path is returned. Security headers include `nosniff`, `no-referrer`, and `no-store`.
@@ -43,7 +44,16 @@ the two body byte limits and three rate limits. Secrets, paths and base URLs in 
 are replaced by booleans with `_set` names. Returns 503 `server_not_configured` when no
 server key is configured, 401 `missing_server_key`/`invalid_server_key` otherwise as
 appropriate, 401 `missing_auth_token` for absent/malformed Bearer, and finally 503
-`auth_not_configured` for any supplied token. A future verified identity will permit 200.
+`auth_not_configured` if Firebase initialization is unavailable. A verified, allowed identity
+receives 200. Allowlists in `config` appear only as counts, never uid/email values.
+
+## GET /api/v1/auth/check
+
+Requires the shared server key, then a Firebase ID token belonging to the configured project.
+Returns `uid` (string), `email` (string or null), `email_verified` (boolean),
+`sign_in_provider` (string or null), and `server_version` (string). This probe supports the
+Connect-laptop screen; after first sign-in use its uid to configure `AUTH_ALLOWED_UIDS`.
+Both this route and diagnostics apply the same per-user limit after verification.
 
 ## Errors and limits
 
@@ -65,15 +75,27 @@ Unhandled exceptions use `internal_error` and `An unexpected error occurred.`.
 | server_not_configured | 503 |
 | missing_auth_token, invalid_auth_token | 401 |
 | auth_not_configured | 503 |
+| auth_token_expired | 401 |
+| auth_unavailable, firestore_unavailable | 503 |
+| account_not_allowed | 403 |
 | forbidden, network_not_allowed | 403 |
 | payload_too_large | 413 |
 | rate_limited | 429 |
 | feature_disabled, provider_unavailable, queue_full, model_not_ready | 503 |
 | internal_error | 500 |
 
+Client actions: `auth_token_expired` means call `getIdToken(true)` and retry once.
+`auth_unavailable` can mean the laptop has no internet to fetch Google's signing certificates;
+restore connectivity and retry. `account_not_allowed` means check the account status and add
+the intended uid to the allowlist. Revoked tokens use `invalid_auth_token`: sign in again.
+`auth_not_configured` requires fixing local Firebase configuration and restarting the server.
+`firestore_unavailable` means storage is temporarily unavailable; retry later.
+Ownership helpers return `not_found` for both missing resources and resources owned by others.
+Firebase errors are visible in health but do not change its model/queue readiness calculation.
+
 All HTTP routes, including health, consume global and per-peer-IP token buckets. Defaults
 are 1200/minute globally and 300/minute per IP with an initial burst equal to that rate.
-A later verified-user dependency allows 240/minute per uid. 429 responses include integer
+The protected-route verified-user dependency allows 240/minute per uid. 429 responses include integer
 `Retry-After` seconds, rounded up with a minimum of 1. Buckets refill continuously and
 hold at most 10,000 keys per limiter, evicting least recently seen keys. They reset on restart.
 
@@ -83,13 +105,12 @@ overhead. Content-Length and streamed bytes are both enforced; if a response has
 started when a streaming overrun occurs, the connection terminates instead of sending a
 second response. CORS is absent by default; explicit origins are required when enabled.
 
-## Planned endpoints (not registered in Phase 1)
+## Planned endpoints (not registered in Phase 2)
 
 Route names below are provisional; later phases define their full contracts.
 
 | Endpoint / family | Status |
 | --- | --- |
-| Identity / session domain APIs | planned (Phase 2) |
 | POST /api/v1/sessions/{session_id}/chunks | planned (Phase 3) |
 | Transcription queue/status and transcript delivery | planned (Phase 3) |
 | Android event/session workflows | planned (Phase 4+) |
