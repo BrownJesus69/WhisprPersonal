@@ -32,27 +32,41 @@ phone; use your laptop's LAN/Tailscale address. The Android emulator can use
 credentials, query, fragment or path. Camera permission is only for QR scanning;
 microphone permission is requested only when Start is pressed after session consent.
 
-### Local native builds on this laptop (measured 2026-11-15)
+### Local native builds on this laptop (verified 2026-11-15)
 
-The C: drive is nearly full and Windows keeps its auto-managed page file there. A full
-native build compiles C++ (Reanimated, Worklets, Screens) for four CPU architectures in
-parallel; `clang` ran out of memory (`LLVM ERROR: out of memory`) and the page file grew to
-23.8 GB, leaving C: with ~0.2 GB. Until C: has ~15 GB free (restart first: Windows only
-shrinks the page file on reboot), either use an **EAS cloud build** (below) or build only
-your phone's architecture with fewer workers, keeping every cache on E::
+A release APK builds locally with **every cache and temp file on E:**
+(`scripts/windows-build/build-apk.ps1`): Android SDK copy, Gradle home, npm cache, TEMP
+and `ANDROID_USER_HOME` all live in `E:\whispr-build-cache`. Verified result: `BUILD
+SUCCESSFUL in 7m 17s`, `app-release.apk` (45.6 MB, `arm64-v8a` only, debug-signed,
+`com.aditya.whisprpersonal` 0.6.0).
+
+Three Windows problems had to be fixed:
+
+1. **Memory.** This laptop has 32 logical CPUs, and ninja runs about 34 `clang` jobs per C++
+   task by default, which ran out of RAM plus pagefile. `NinjaCap.cs` is a tiny wrapper
+   installed as the E: SDK copy's `cmake\3.22.1\bin\ninja.exe` (the real one is renamed
+   `ninja-real.exe`). It caps parallelism at `WHISPR_NINJA_JOBS` (default 6).
+   `gradle-user-home.properties` (copy it to `E:\whispr-build-cache\gradle\gradle.properties`)
+   limits Gradle to 2 workers, a 4 GB heap and `arm64-v8a` only.
+2. **Paths over 260 characters.** ninja 1.10 cannot stat long codegen object paths
+   (react-native-gesture-handler). The `plugins/withWindowsCmakePaths.js` config plugin passes
+   `-DCMAKE_OBJECT_PATH_MAX=250` on Windows only, so CMake hashes the long paths.
+3. **The C: pagefile.** Windows still grows its auto-managed pagefile on C: during the build
+   (20.1 GB to 23.9 GB, about 3.8 GB of C: space) even though the build writes no files to
+   C:. A reboot shrinks it back. To stop this for good, move the pagefile to E: yourself:
+   System Properties → Advanced → Performance → Settings → Advanced → Virtual memory.
 
 ```powershell
-$env:ANDROID_HOME = 'E:\whispr-build-cache\android-sdk'   # copy of the SDK pieces needed
-$env:GRADLE_USER_HOME = 'E:\whispr-build-cache\gradle'
-$env:TEMP = 'E:\whispr-build-cache\tmp'; $env:TMP = $env:TEMP
-npx expo prebuild --platform android
-cd android
-.\gradlew.bat assembleDebug --max-workers=2 -PreactNativeArchitectures=arm64-v8a
+# One-time: compile the ninja cap into the E: SDK copy
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /out:E:\whispr-build-cache\ninja-cap.exe scripts\windows-build\NinjaCap.cs
+Rename-Item E:\whispr-build-cache\android-sdk\cmake\3.22.1\bin\ninja.exe ninja-real.exe
+Copy-Item E:\whispr-build-cache\ninja-cap.exe E:\whispr-build-cache\android-sdk\cmake\3.22.1\bin\ninja.exe
+# Each build (prebuild + assembleRelease):
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows-build\build-apk.ps1
+# Output: android\app\build\outputs\apk\release\app-release.apk
 ```
 
-Verified so far by a native build: prebuild succeeds, and every Java/Kotlin module compiles
-once Kotlin is set to 2.3.21 (`app.config.js` explains why). The C++ link step has not
-completed on this machine because of the memory limit above.
+An **EAS cloud build** (below) avoids all of this.
 
 ## Firebase setup (owner, online)
 

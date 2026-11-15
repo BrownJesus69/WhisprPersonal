@@ -75,6 +75,7 @@ module.exports = {
           },
         },
       ],
+      './plugins/withWindowsCmakePaths',
       // Must run last: Android-only introspection and removal of Phase 4's stale mic block.
       './plugins/withAndroidRecording',
     ],
