@@ -71,3 +71,6 @@ Thumbs.db
 .vscode/
 *.png.bak
 Screenshot*.png
+
+# Small committed test fixtures (synthetic TTS speech, no personal audio)
+!server/app/tests/fixtures/*.m4a
