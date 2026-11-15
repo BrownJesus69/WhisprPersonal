@@ -1,7 +1,6 @@
 """Shared-secret-first authentication and verified identity allowlists.
 
-App Check (feature_app_check, Phase 10) is currently a no-op even when enabled;
-it must not block the MVP.
+App Check is enforced only with its flag and an explicitly configured verifier.
 """
 
 import logging
@@ -13,6 +12,7 @@ from fastapi import Request
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
+from app.integrations.app_check import enforce_app_check
 from app.security.shared_secret import require_server_key
 
 
@@ -52,6 +52,7 @@ def bearer_token(request: Request) -> str:
 
 async def require_firebase_auth(request: Request) -> VerifiedUser:
     await require_server_key(request)
+    await enforce_app_check(request)
     token = bearer_token(request)
     if token.startswith("wpg1."):
         raise AppError(
@@ -62,6 +63,7 @@ async def require_firebase_auth(request: Request) -> VerifiedUser:
 
 async def require_auth(request: Request) -> VerifiedUser:
     await require_server_key(request)
+    await enforce_app_check(request)
     return await get_current_user(request)
 
 

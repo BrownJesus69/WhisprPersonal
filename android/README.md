@@ -37,8 +37,8 @@ microphone permission is requested only when Start is pressed after session cons
 A release APK builds locally with **every cache and temp file on E:**
 (`scripts/windows-build/build-apk.ps1`): Android SDK copy, Gradle home, npm cache, TEMP
 and `ANDROID_USER_HOME` all live in `E:\whispr-build-cache`. Verified result: `BUILD
-SUCCESSFUL in 7m 35s` (2026-11-16), `app-release.apk` (45.8 MB, `arm64-v8a` only, debug-signed,
-`com.aditya.whisprpersonal` 0.9.0, versionCode 9).
+SUCCESSFUL in 7m 46s` (2026-11-16), `app-release.apk` (45.8 MB, `arm64-v8a` only, debug-signed,
+`com.aditya.whisprpersonal` 1.0.0, versionCode 10).
 
 Three Windows problems had to be fixed:
 

@@ -5,7 +5,8 @@ process. Nothing translates live text by default. Owners explicitly request tran
 finalized sessions, including completed chunks of partial finalized transcripts. Original
 `raw_text` and `raw_text_full` remain unchanged. A failed engine returns the non-blocking warning
 **Translation unavailable; showing the original transcript.** Display the original alongside it.
-Phone UI integration is Phase 10b.
+Phone UI is available in Phase 10b: finalized sessions and saved transcripts offer a target
+picker and a separately labelled Translation tab; optional export inclusion defaults off.
 
 ## Engines and labels
 

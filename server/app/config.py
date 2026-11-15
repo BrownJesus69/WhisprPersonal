@@ -134,7 +134,15 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
     cors_allowed_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
     gpu_detection: Literal["auto", "off"] = "auto"
-    feature_translation: bool = False
+    # Future provider identifiers only; no SDK/client is initialized from these placeholders.
+    calendar_account: str | None = None
+    drive_folder_id: str | None = None
+    gmail_account: str | None = None
+    app_check_project_id: str | None = None
+    fcm_project_id: str | None = None
+    web_search_api_key: SecretStr | None = Field(None, repr=False)
+    cloud_whisper_api_key: SecretStr | None = Field(None, repr=False)
+    cloud_whisper_model: str | None = None
     feature_calendar: bool = False
     feature_drive: bool = False
     feature_gmail: bool = False
@@ -151,6 +159,14 @@ class Settings(BaseSettings):
         return value
 
     @field_validator(
+        "calendar_account",
+        "drive_folder_id",
+        "gmail_account",
+        "app_check_project_id",
+        "fcm_project_id",
+        "web_search_api_key",
+        "cloud_whisper_api_key",
+        "cloud_whisper_model",
         "server_shared_secret",
         "auth_grant_signing_key",
         "firebase_credentials_path",
@@ -312,6 +328,14 @@ class Settings(BaseSettings):
             elif name in {"models_dir", "data_dir", "firebase_credentials_path"} or name.endswith(
                 ("_api_key", "_shared_secret", "_signing_key")
             ):
+                result[f"{name}_set"] = bool(value)
+            elif name in {
+                "calendar_account",
+                "drive_folder_id",
+                "gmail_account",
+                "app_check_project_id",
+                "fcm_project_id",
+            }:
                 result[f"{name}_set"] = bool(value)
             elif name.endswith(("_base_url", "_url", "_path")):
                 # URLs can contain credentials, query data or local filesystem paths.

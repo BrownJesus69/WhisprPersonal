@@ -33,8 +33,8 @@ Protected routes require a minimum 32-character shared secret, compared in const
 as UTF-8 bytes, before token verification. An unset secret returns 503 rather than allowing
 access. An unset verifier also returns 503; no token is accepted by default. After the shared
 key check, Firebase Admin verifies ID tokens and the local grant verifier handles `wpg1.`
-tokens. App Check is a documented
-no-op until Phase 10, even with its feature flag enabled.
+tokens. App Check remains optional: its flag alone is a no-op. Enforcement also requires
+an explicitly configured verifier; see [future integrations](integrations.md#app-check).
 
 Secrets use `SecretStr`. Keep credentials in git-ignored `secrets/`, mounted read-only
 in Docker, and server settings in an untracked `server/.env`. Never copy credentials into
@@ -76,7 +76,7 @@ certificates come from Google over HTTPS and are cached by the SDK in memory. Ex
 revoked, disabled-user, malformed-token and certificate-fetch failures have distinct safe
 error mappings. Unexpected SDK errors log the exception type only. Token contents and SDK
 messages never appear in responses or logs. Only a small allowlist of claims is retained.
-App Check remains unenforced until Phase 10.
+App Check remains unenforced unless its feature flag and a configured verifier are both present.
 
 Optional account allowlists admit a matching uid OR a matching verified email. Email
 matching is case-insensitive and requires `email_verified == True`. Empty lists admit any
@@ -288,3 +288,22 @@ terminal local-ASR unavailability, caps WAV uploads at 25 MB, and rechecks priva
 every attempt. `local_only`, unknown consent and ownership mismatches block cloud uploads.
 Only status words/counts are exposed by health, and logs omit content. Translations stay in
 local SQLite; no translation text is synced to Firestore. Protect DATA_DIR as transcript data.
+
+## Phase 10b phone translation and integration boundaries
+
+The app validates translation jobs, per-chunk provenance and engine status before persistence.
+Translations and optional AI-polish remain separate from raw transcript rows and are deleted
+with their session. No translation text is sent to Firestore. Diagnostics allow only known
+direction/status words, supported LibreTranslate pairs and configuration booleans for translation.
+Exports explicitly include translation only when the owner selects it; every line has provenance.
+Review the receiving app before sharing event content.
+
+Translation polish is explicit and defaults off. The toggle appears only when `/ai/status`
+reports a usable provider for the event privacy mode. Cloud providers are allowed only for
+`cloud_ai`; unknown privacy does not enable polish. The laptop rechecks privacy independently.
+
+Future integration stubs have no transports or credential initialization. App Check only
+verifies when both `FEATURE_APP_CHECK` and an injected verifier's `configured` property are true;
+an enabled but unconfigured flag cannot block the MVP. Existing key/identity checks still fail
+closed. Never log App Check tokens or add integration credentials to the client bundle.
+See [future integration privacy notes](integrations.md).

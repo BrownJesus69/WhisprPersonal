@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 
 from app import __version__
 from app.config import Settings
+from app.integrations import integration_status
 from app.schemas.health import (
     AuthInfo,
     FeaturesInfo,
@@ -37,6 +38,7 @@ def build_health(request: Request) -> HealthResponse:
         )
 
     return HealthResponse(
+        integrations=integration_status(settings),
         translation=request.app.state.translation_router.status(),
         status="ok"
         if state.model_status == "ready" and state.queue_status == "running"

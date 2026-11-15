@@ -120,3 +120,17 @@ screen-reader actions. Use disposable consented test data for deletion/failure d
 
 Use the [final rehearsal checklist](event-runbook.md#final-rehearsal-checklist-print-this-page)
 as the go/no-go record. Automated results and hardware verification must be reported separately.
+
+## Phase 10b acceptance coverage
+
+| Area | Automated checks | Device rehearsal |
+| --- | --- | --- |
+| Translation API/poller | Runtime validation, nullable failure rows, durable submission, restart resume, retry without resubmit, terminal errors and late response cancellation | Reopen app during a queued translation |
+| SQLite migration 6 | Exact separate translation/job columns, uniqueness, language isolation, owner-scoped deletion and linked job removal; raw stays unchanged | Open an existing install after upgrade |
+| Translation views | Labels for all three engines, `und` emergency audio note, separate AI-polished block, original fallback, non-blocking unavailable banner, Raw access, control hidden until finalized, privacy-gated polish | Check scrolling, accessibility and large fonts on both session and saved transcript screens |
+| Export/stream | Optional labelled translation section after transcript, each physical line labelled; audio event validation and unknown type tolerance | Share Markdown/TXT with translation selected |
+| Diagnostics/settings | Whitelisted direction/state words and pairs, separate translation section, server-backed disabled integration list with offline fallback | Disconnect laptop and inspect fallback |
+| Future integrations | No HTTP use by every stub (failing MockTransport), flags off, placeholders empty, health/diagnostic inventory, App Check both-gate enforcement and unconfigured non-blocking behavior | Confirm core recording works with all integrations unconfigured |
+
+Phase 10a translator model verification remains unchanged. Phase 10b automated UI tests do not
+replace a physical Android rehearsal or claim new real-model translation accuracy results.

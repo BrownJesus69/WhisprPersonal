@@ -1,3 +1,4 @@
+import { DIRECTIONS, ENGINE_STATES } from '../translation/types';
 import type { Repositories } from '../db/repositories';
 export type DiagnosticRow = { label: string; value: string };
 const object = (v: unknown): Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string,unknown> : {};
@@ -12,6 +13,7 @@ export function laptopDiagnostics(data: unknown): DiagnosticRow[] {
   };
   for (const [group, keys] of Object.entries(groups)) for (const key of keys) add(`${group}.${key}`,object(root[group])[key]);
   for (const provider of ['groq','sambanova','local_llm']) for (const key of ['configured','status','model']) add(`${provider}.${key}`,object(object(root.providers)[provider])[key]);
+  rows.push(...translationDiagnostics(root.translation));
   return rows;
 }
 export function serverHost(url: string) {
@@ -44,4 +46,17 @@ export async function phoneDiagnostics(repo: Repositories, owner: string, info: 
 }
 export function diagnosticsText(phone: DiagnosticRow[], laptop: DiagnosticRow[]) {
   return ['WhisprPersonal diagnostics','Phone',...phone.map(r => `${r.label}: ${r.value}`),'','Laptop',...(laptop.length ? laptop.map(r => `${r.label}: ${r.value}`) : ['Unavailable; connect to laptop'])].join('\n');
+}
+
+export function translationDiagnostics(data: unknown): DiagnosticRow[] {
+  const root = object(data), indic = object(root.indictrans2), libre = object(root.libretranslate);
+  const rows = DIRECTIONS.map(d => ({ label: `IndicTrans2 ${d}`, value: ENGINE_STATES.includes(indic[d] as never) ? String(indic[d]) : 'unavailable' }));
+  for (const source of ['kn','ta','hi','en']) for (const target of ['kn','ta','hi','en']) {
+    if (source === target) continue;
+    const pair = `${source}-${target}`, p = object(libre[pair]);
+    if (typeof p.enabled !== 'boolean') continue;
+    rows.push({ label: `LibreTranslate ${pair}`, value: `${p.enabled === true ? 'enabled' : 'disabled'} \u00b7 ${p.eligible === true ? 'eligible' : 'ineligible'} \u00b7 ${p.available === true ? 'available' : 'unavailable'}` });
+  }
+  rows.push({ label: 'Groq audio translation', value: object(root.groq_audio).configured === true ? 'configured' : 'not_configured' });
+  return rows;
 }

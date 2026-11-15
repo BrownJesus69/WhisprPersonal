@@ -1,3 +1,6 @@
+import { TranslationAPI } from '@/lib/translation/api';
+import { authedClient } from '@/lib/server/authedClient';
+import { translationDiagnostics } from '@/lib/export/diagnostics';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Switch } from 'react-native';
@@ -19,12 +22,16 @@ import { useAuthStore } from '@/state/authStore';
 import { LANGUAGES } from '@/types/models';
 import { signOutAccount } from '@/lib/server/tokenManager';
 import { config } from '@/lib/config';
-import { integrations } from '@/features/integrations';
+import { integrationStatuses } from '@/features/integrations';
 
 export default function Settings() {
   const s = useSettingsStore();
   const c = useConnectionStore();
   const user = useAuthStore(a => a.user);
+  const connected = ['connected','verified'].includes(c.status);
+  const translation = useQuery({ queryKey: ['translation-status',user?.uid,s.serverUrl], enabled: !!user && connected, retry: false, refetchInterval: 30000, queryFn: async () => {
+    const client = authedClient(user!.uid); if (!client) throw new Error('Offline'); return new TranslationAPI(client).status();
+  } });
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const storage = useQuery({ queryKey: ['recording-storage', user?.uid], enabled: !!user,
@@ -110,7 +117,9 @@ export default function Settings() {
     <KeyValueRow label="Expo SDK" value={config.sdk} />
     <KeyValueRow label="Offline pass valid until" value={c.passExpiry ? new Date(c.passExpiry * 1000).toLocaleString() : 'No pass'} />
     {c.health ? <HealthPanel health={c.health} /> : <Banner message="Test the laptop connection to see diagnostics." />}
+    <SectionHeader title="Translation (on your laptop)" />
+    {translationDiagnostics(connected ? translation.data ?? c.health?.translation : undefined).map(r => <KeyValueRow key={r.label} {...r} />)}
     <SectionHeader title="Future integrations" />
-    {integrations.map(i => <KeyValueRow key={i.name} label={i.name} value={i.status} />)}
+    {integrationStatuses(connected ? c.health : null).map(i => <KeyValueRow key={i.name} label={i.name} value={`${i.status} \u00b7 ${i.explanation}`} />)}
   </Screen>;
 }

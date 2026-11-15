@@ -69,7 +69,6 @@ class AuthInfo(BaseModel):
 
 
 class FeaturesInfo(BaseModel):
-    translation: bool
     calendar: bool
     drive: bool
     gmail: bool
@@ -80,6 +79,7 @@ class FeaturesInfo(BaseModel):
 
 
 class HealthResponse(BaseModel):
+    integrations: dict[str, Any] = Field(default_factory=dict)
     translation: dict[str, Any] = Field(default_factory=dict)
     status: Literal["ok", "degraded"]
     version: str

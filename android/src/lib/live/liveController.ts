@@ -1,3 +1,5 @@
+import { TranslationAPI } from '../translation/api';
+import { authedClient } from '../server/authedClient';
 import { AppState } from 'react-native';
 import { addNetworkStateListener } from 'expo-network';
 import { repositories, type Repositories } from '../db/repositories';
@@ -59,7 +61,15 @@ async function reconcile(id: string, e: Entry, refresh = false) {
           if (!sameOwner()) throw new ServerError(0, 'renew_required', 'Sign in to the recording account');
           return token;
         }, onAuthExpired: tokens.onAuthExpired,
-        persist: event => repo.persistEvent(event), resetLastEventSeq: () => repo.resetLastEventSeq(id),
+        persist: async event => {
+          if (event.type === 'chunk_audio_translated' && sameOwner()) {
+            const client = authedClient(owner); if (!client) throw new Error('Offline');
+            const rows = await new TranslationAPI(client).translations(id, 'en');
+            if (!sameOwner()) return;
+            await repo.storeTranslations(id, 'en', rows);
+          }
+          await repo.persistEvent(event);
+        }, resetLastEventSeq: () => repo.resetLastEventSeq(id),
         apply: event => { if (sameOwner()) useTranscriptStore.getState().dispatch(event); },
         applyPartials: events => { if (sameOwner()) useTranscriptStore.getState().dispatchPartials(events); },
         status: (status, attempt) => {

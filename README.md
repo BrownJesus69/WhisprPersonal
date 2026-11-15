@@ -55,7 +55,9 @@ content with the chosen receiving app. One laptop process/worker is supported.
 
 | State | Scope |
 | --- | --- |
-| Complete in code | Phases 1-9: server, auth, recording, queue/recovery, live transcript, notes, optional AI, export/viewers, vocabulary, deletion, diagnostics, operating documentation |
+| Complete in code | Phases 1-10b: server, auth, recording, queue/recovery, live transcript, notes, optional AI, export/viewers, vocabulary, deletion, diagnostics, local translation UI, disabled integration stubs, operating documentation |
+| Local translation | IndicTrans2 verified on this laptop; phone target picker, labelled Translation tab and optional export; LibreTranslate hi→en eligible but disabled until enabled; Groq emergency English audio fallback opt-in |
+| Disabled future integrations | Calendar, Drive, Gmail, App Check, FCM, web search and Cloud Whisper; [owner prerequisites](docs/integrations.md) |
 | Disabled pending keys/config | Groq and SambaNova each require both a key and an account-accessible model; local LLM requires explicit URL/model; Google Sign-In stays behind its feature flag |
 | Owner must configure | Enable Email/Password in Firebase console; deploy Firestore rules and indexes; set server shared secret and Firebase service-account path privately; choose provider keys/models if wanted; Tailscale is optional |
 | Not yet verified on a device | Full Phase 9 APK flows, native sharing, screen-lock endurance, failure drills, export readability and deletion recovery on real hardware |

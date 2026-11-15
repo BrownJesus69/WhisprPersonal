@@ -1,3 +1,4 @@
+import { TranslationAPI } from '@/lib/translation/api';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Constants from 'expo-constants';
@@ -25,7 +26,8 @@ export default function Diagnostics() {
   } });
   const laptop = useQuery({ queryKey: ['laptop-diagnostics',uid,url], enabled: !!uid && !!url, retry: false, queryFn: async () => {
     const client = authedClient(uid!); if (!client) throw new Error('Unavailable');
-    return laptopDiagnostics(await client.get<unknown>('/api/v1/diagnostics'));
+    const [data, translation] = await Promise.all([client.get<Record<string,unknown>>('/api/v1/diagnostics'), new TranslationAPI(client).status().catch(() => undefined)]);
+    return laptopDiagnostics({ ...data, translation: translation ?? data.translation });
   } });
   return <Screen title="Diagnostics">
     <Banner message="Diagnostics contain status and counts. Transcript text, notes, keys, tokens and device identifiers are excluded." />

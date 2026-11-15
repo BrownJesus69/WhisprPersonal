@@ -12,6 +12,7 @@ interface Payloads {
   chunk_processing: { chunk_id: string; sequence: number };
   transcript_final: FinalData;
   transcript_revised: FinalData;
+  chunk_audio_translated: { sequence: number; target_lang: 'en'; engine: 'groq-audio-translation' };
   chunk_failed: { chunk_id: string; sequence: number; error_code: string };
   language_locked: { language: string; confidence: number; at_sequence: number };
   language_changed: { from: string | null; to: string; at_sequence: number };
@@ -59,6 +60,7 @@ export function parseEvent(input: unknown): StreamEvent | null {
     case 'session_created': valid = str(d.event_id); break;
     case 'chunk_queued': case 'chunk_processing': valid = str(d.chunk_id) && int(d.sequence); break;
     case 'transcript_final': case 'transcript_revised': valid = isFinalData(d); break;
+    case 'chunk_audio_translated': valid = int(d.sequence) && d.target_lang === 'en' && d.engine === 'groq-audio-translation'; break;
     case 'chunk_failed': valid = str(d.chunk_id) && int(d.sequence) && code(d.error_code); break;
     case 'language_locked': valid = language(d.language) && confidence(d.confidence) && int(d.at_sequence); break;
     case 'language_changed': valid = (d.from === null || language(d.from)) && language(d.to) && int(d.at_sequence); break;

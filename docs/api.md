@@ -30,7 +30,7 @@ both model status is `ready` and queue status is `running`.
 | providers | `groq`, `sambanova`, `local_llm`, each `{configured: boolean, status: not_configured/configured_unchecked}` |
 | firebase | `{credentials_present: boolean, status: not_configured/ready/error, error_reason: null/credentials_missing/credentials_invalid/init_failed, project_id_set: boolean}` |
 | auth | `{shared_secret_configured: boolean, token_verification: disabled/firebase, allowlist_enabled: boolean, check_revoked: boolean, grants: {enabled: boolean, ttl_hours: number}}`; token_verification describes the Firebase path |
-| features | boolean `translation`, `calendar`, `drive`, `gmail`, `app_check`, `fcm`, `web_search`, `cloud_whisper` |
+| features | boolean `calendar`, `drive`, `gmail`, `app_check`, `fcm`, `web_search`, `cloud_whisper` |
 
 With preload disabled, startup values are `degraded`, `not_loaded`, `running`, and
 unconfigured providers. Default preload loads turbo asynchronously. Configured providers are never contacted here. Names in the model object are
@@ -399,3 +399,12 @@ response adds `engine:"indictrans2"`, pinned `model`, source/target, segments an
 Unset secret returns 503 `translator_not_configured`; invalid key returns 401. Same-language
 and unsupported pairs return 422. Missing model, OOM and generation failures return 503.
 Errors use `{error:{code,message,request_id}}`, without content, credentials or paths.
+
+## Phase 10b static integrations inventory
+
+`GET /health` and authenticated `GET /api/v1/diagnostics` include `integrations` keyed by
+`calendar`, `drive`, `gmail`, `app_check`, `fcm`, `web_search`, `cloud_whisper`. Each has
+`{enabled:false,status:"disabled"|"not_configured",docs:"docs/integrations.md#<anchor>"}`.
+The inventory performs no I/O. Flag off reports disabled; flag on still reports not_configured
+for these stubs. `features.translation` is removed: use the independent `translation` engine
+block or `/api/v1/translation/status`. The Phase 10a translation endpoint behavior is unchanged.

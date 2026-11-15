@@ -34,7 +34,7 @@ beforeAll(async () => {
 });
 afterAll(() => sql.close());
 test('migration 4 creates the exact AI storage columns', () => {
-  expect(sql.prepare('PRAGMA user_version').get()?.user_version).toBe(5);
+  expect(sql.prepare('PRAGMA user_version').get()?.user_version).toBe(6);
   for (const [table, keys] of Object.entries({ ai_jobs: Object.keys(aiJob()), brief_drafts: Object.keys(draft()) })) {
     expect(sql.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name).sort()).toEqual(keys.sort());
   }

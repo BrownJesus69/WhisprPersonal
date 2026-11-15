@@ -1,3 +1,5 @@
+import { translationParts, translationLabel, polishLabel, audioLabel } from '../translation/labels';
+import type { Translation, Target } from '../translation/types';
 import type { EventModel } from '@/types/models';
 import { LANGUAGES } from '@/types/models';
 import type { LocalSession, TranscriptRow, LanguageEventRow } from '../db/repositories';
@@ -24,6 +26,7 @@ export function transcriptParts(session: LocalSession, rows: TranscriptRow[], te
 }
 export function composeEventExport(input: {
   event: EventModel; sessions: LocalSession[]; transcripts: TranscriptRow[]; languageEvents?: LanguageEventRow[];
+  translation?: { target: Target; rows: Translation[] };
   notes: Note[]; brief?: Pick<SavedBrief, 'finalText' | 'provider' | 'model'>; format: 'md' | 'txt'; text: 'raw' | 'polished'; now?: Date;
 }): ExportDocument {
   const { event, format, text } = input, now = input.now ?? new Date();
@@ -50,6 +53,23 @@ export function composeEventExport(input: {
       lines.push(`[${clock(r.startMs)}] ${r.text}${r.notCleaned ? ' (not cleaned)' : ''}`);
     }
     lines.push('');
+  }
+  if (input.translation) {
+    const { target, rows } = input.translation;
+    lines.push(heading(2,`Translation (${languageName(target)})`));
+    for (const session of input.sessions.filter(s => s.event_id === event.id)) {
+      lines.push(heading(3,`Session ${session.created_at}`));
+      for (const part of translationParts(session,input.transcripts,rows,target)) {
+        const r = part.translated;
+        const label = r ? translationLabel(r) : 'Not translated';
+        const prefix = `[${clock(part.original?.startMs ?? part.sequence * session.chunk_ms)}] ${label}`;
+        // Label each physical line, including multi-line translations and polished blocks.
+        for (const line of part.text.split(/\r?\n/)) lines.push(`${prefix}: ${line}`);
+        if (r?.source_lang === 'und' && r.engine === 'groq-audio-translation') lines.push(`${prefix}: ${audioLabel}`);
+        if (r?.polished_text != null) for (const line of r.polished_text.split(/\r?\n/)) lines.push(`${prefix} \u00b7 ${polishLabel(r)}: ${line}`);
+      }
+      lines.push('');
+    }
   }
   const slug = event.title.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'event';
   const suffix = `-${now.toISOString().slice(0,10).replace(/-/g,'')}.${format}`;

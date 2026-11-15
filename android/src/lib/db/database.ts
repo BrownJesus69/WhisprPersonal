@@ -102,5 +102,23 @@ async function open() {
       session_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, owner_uid TEXT NOT NULL
     ); PRAGMA user_version = 5;`);
   });
+  if ((version?.user_version ?? 0) < 6) await db.withExclusiveTransactionAsync(async tx => {
+    await tx.execAsync(`
+      CREATE TABLE translations (
+        session_id TEXT NOT NULL REFERENCES recording_sessions(id) ON DELETE CASCADE,
+        sequence INTEGER NOT NULL, target_lang TEXT NOT NULL, source_lang TEXT NOT NULL,
+        text TEXT, engine TEXT, model TEXT, created_at TEXT NOT NULL,
+        polished_text TEXT, polish_provider TEXT, polish_model TEXT, polished_at TEXT, error_code TEXT,
+        PRIMARY KEY(session_id,sequence,target_lang)
+      );
+      CREATE TABLE translation_jobs (
+        job_id TEXT PRIMARY KEY, owner_uid TEXT NOT NULL, event_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK(kind='translate'), session_ids TEXT NOT NULL,
+        target_lang TEXT NOT NULL, status TEXT NOT NULL, error_code TEXT,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      PRAGMA user_version = 6;
+    `);
+  });
   return db;
 }

@@ -390,3 +390,20 @@ enabling any `LIBRETRANSLATE_ENABLED_PAIRS`. No pair is enabled by default. Emer
 audio→English is also disabled unless explicitly enabled with key/model and `cloud_ai` consent.
 With no models/services available, health reports unavailable translation while core transcription
 continues. The phone translation UI is Phase 10b and is not changed here.
+
+## Phone translation and future integrations (Phase 10b)
+
+Follow [local translator setup](translation.md) with the models already downloaded. In phone
+Settings, check **Translation (on your laptop)**: `ready_on_disk` or `loaded` means a direction
+can serve requests. LibreTranslate pairs need both benchmark eligibility and explicit enabling;
+hi→en is eligible on this laptop but stays disabled until the owner enables it. Groq audio
+fallback is separately opt-in and English-only. Translation needs no Google translation key.
+
+After finalization, open the session or saved transcript, choose English/Kannada/Tamil/Hindi
+and tap Translate. AI-polish is off by default and shown only with an available provider allowed
+by the event privacy mode. Translation jobs resume polling after app restart without submitting
+again. For exports, **Include translation (target)** is off by default and uses saved phone rows.
+
+Future integration placeholders in `server/.env.example` are empty and flags default false.
+See [integrations](integrations.md) for owner prerequisites. Enabling a stub flag does not call
+an API; App Check remains unenforced without a configured verifier.

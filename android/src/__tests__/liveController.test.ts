@@ -10,6 +10,8 @@ import { credentials } from '../lib/server/credentials';
 import { FakeSocket } from './fakeSocket';
 import { session } from './recordingFixtures';
 import { finalEvent, hello, liveId } from './liveFixtures';
+import { TranslationAPI } from '../lib/translation/api';
+import { translation } from './translationFixtures';
 
 async function flush() { for (let i = 0; i < 100; i++) await Promise.resolve(); }
 async function setup(serverCreated = 1) {
@@ -59,4 +61,18 @@ test('hydrated finalized session disconnects once caught up and stays stopped', 
   t.sockets[0].open(); t.sockets[0].message(hello(2)); await flush();
   expect(t.sockets[0].readyState).toBe(3); expect(useTranscriptStore.getState().sessions[liveId].model.finals.size).toBe(1);
   useRecordingStore.setState({ dbfs: -20 }); await flush(); expect(t.sockets).toHaveLength(1); release();
+});
+
+test('audio translation stream event fetches English rows before advancing cursor; unknown events do not break stream', async () => {
+  const t = await setup();
+  const fetch = jest.spyOn(TranslationAPI.prototype,'translations').mockResolvedValue([translation({ source_lang: 'und', engine: 'groq-audio-translation' })]);
+  const release = liveController.acquire(liveId); await flush();
+  t.sockets[0].open(); t.sockets[0].message(hello()); await flush();
+  t.sockets[0].message({ type: 'future_type', seq: 1, session_id: liveId, ts: 'now', data: {} });
+  t.sockets[0].message({ type: 'chunk_audio_translated', seq: 2, session_id: liveId, ts: 'now', data: { sequence: 0, target_lang: 'en', engine: 'groq-audio-translation' } });
+  await flush();
+  expect(fetch).toHaveBeenCalledWith(liveId,'en');
+  expect((await t.repo.translations(liveId,'en'))[0].source_lang).toBe('und');
+  expect((await t.repo.session(liveId))?.last_event_seq).toBe(2);
+  expect(await t.repo.transcript(liveId)).toEqual([]); release();
 });

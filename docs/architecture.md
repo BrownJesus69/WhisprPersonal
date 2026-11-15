@@ -270,3 +270,23 @@ raw text never depend on either dedicated engine or a translation result.
 
 Public health uses cached translation status only. Separate two-second loopback probes refresh
 every 30 seconds. See [translation.md](translation.md) for revisions, benchmarks and operations.
+
+## Phase 10b: phone translation and disabled integrations
+
+Phone SQLite migration 6 adds `translations` keyed by `(session_id, sequence, target_lang)` and
+a separate `translation_jobs` table with local kind `translate` and target language. Neither
+writes translation output into `transcript_chunks`. Session deletion removes translations and
+all jobs referencing the session. Late poll/fetch responses cannot resurrect a deleted session.
+The durable poller resumes queued/running jobs on restart, retries reads with bounded backoff,
+and never automatically resubmits work. Terminal interrupted jobs require an owner request.
+
+Finalized session and transcript views share target selection, optional privacy-gated AI-polish,
+and a Translation tab. Missing/failed rows fall back to raw text. Dedicated translation and
+AI-polished blocks have distinct provenance. Audio events are validated and trigger an English
+translation fetch before persisting the stream cursor; unknown event types are ignored.
+Exports append an optional labelled translation section; raw speech remains separately stored.
+
+`app/integrations/` defines one protocol and disabled implementation per future service.
+Static health/diagnostic inventory does no I/O. Flags default false; empty placeholders never
+initialize clients. App Check enforcement is gated by both its flag and a configured injected
+verifier. See [integration contracts](integrations.md).

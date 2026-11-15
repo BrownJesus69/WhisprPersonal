@@ -1,3 +1,6 @@
+import { TranslationControl } from '@/components/TranslationControl';
+import { TranslationList } from '@/components/TranslationList';
+import { useTranslation } from '@/hooks/useTranslation';
 import { deleteSession, LaptopUnavailable } from '@/lib/session/deleteSession';
 import { deleteAudio, listChunkFiles, removeParts } from '@/lib/audio/chunkFiles';
 import { authedClient } from '@/lib/server/authedClient';
@@ -39,7 +42,7 @@ export default function SessionScreen() {
   const connection = useConnectionStore(s => s.status);
   const recording = useRecordingStore();
   const [deleting,setDeleting] = useState(false);
-  const [tab, setTab] = useState<'raw' | 'polished'>('raw');
+  const [tab, setTab] = useState<'raw' | 'polished' | 'translation'>('raw');
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
   const client = useQueryClient();
@@ -53,6 +56,7 @@ export default function SessionScreen() {
     }
   });
   const session = query.data?.session;
+  const translation = useTranslation(session);
   const live = useTranscriptStore(s => s.sessions[sessionId] ?? emptyView);
   useEffect(() => { if (session?.owner_uid === uid) return liveController.acquire(sessionId); }, [session?.owner_uid, sessionId, uid]);
   const event = useQuery({ queryKey: ['event', uid, session?.event_id], enabled: !!session && !!uid,
@@ -130,15 +134,17 @@ export default function SessionScreen() {
         { text: 'Cancel', style: 'cancel' }, { text: 'Delete session', style: 'destructive', onPress: () => { void removeSession(); } }
       ])} />
       <CleanupControl session={session} privacy={event.data?.privacyMode} />
+      <TranslationControl session={session} privacy={event.data?.privacyMode} target={translation.target} change={translation.setTarget} active={translation.active} job={translation.job} onSubmitted={() => setTab('translation')} />
+      {translation.message && <Banner message={translation.message} />}
       </ScrollView>
-      <TranscriptTabs selected={tab} onSelect={setTab} />
+      <TranscriptTabs translation={session.status === 'finalized'} selected={tab} onSelect={setTab} />
       {!!live.model.language.timeline.length && <ScrollView horizontal style={{ flexGrow: 0 }} accessibilityLabel="Language timeline">
         <Text selectable style={{ ...typography.label, color: t.muted }}>{live.model.language.timeline.map(s => `${languageName(s.language)} (${s.fromSequence + 1}–${s.toSequence + 1})`).join(' → ')}</Text>
       </ScrollView>}
-      <TranscriptList polished={tab === 'polished'} stored={query.data?.transcript} onAddNote={row => act(async () => {
+      {tab === 'translation' ? <TranslationList session={session} originals={query.data?.transcript ?? []} rows={translation.rows} target={translation.target} /> : <TranscriptList polished={tab === 'polished'} stored={query.data?.transcript} onAddNote={row => act(async () => {
         await createNote(session.event_id, { text: row.text, source: 'transcript', timestampMs: row.startMs, sessionId, sequence: row.sequence, language: row.language ?? null });
         if (Platform.OS === 'android') ToastAndroid.show('Added to notes', ToastAndroid.SHORT);
-      })} model={live.model} chunkStarts={Object.fromEntries((query.data?.chunks ?? []).map(c => [c.sequence, c.start_ms]))} />
+      })} model={live.model} chunkStarts={Object.fromEntries((query.data?.chunks ?? []).map(c => [c.sequence, c.start_ms]))} />}
       <ConsentDialog visible={consent} cancel={() => setConsent(false)} confirm={() => {
         setConsent(false); act(() => recording.start(session, event.data?.title ?? 'Event recording', true));
       }} />

@@ -1,3 +1,4 @@
+import type { Translation, TranslationJob, Target } from '../translation/types';
 import type { AIJob, BriefDraft, PolishedChunk } from '../ai/types';
 import { normalizeSearch, escapeLike, type Note, type SyncState } from '../notes/model';
 import type { SQLiteDatabase, SQLiteBindValue } from 'expo-sqlite';
@@ -79,7 +80,13 @@ export interface AIRepo {
   putBriefDraft(draft: BriefDraft): Promise<void>;
   deleteBriefDraft(owner: string, id: string): Promise<void>;
 }
-export type Repositories = SessionRepo & ChunkRepo & TranscriptRepo & NoteRepo & AIRepo;
+export interface TranslationRepo {
+  translations(sessionId: string, target: Target): Promise<Translation[]>;
+  storeTranslations(sessionId: string, target: Target, rows: Translation[]): Promise<void>;
+  translationJobs(owner: string, eventId?: string): Promise<TranslationJob[]>;
+  putTranslationJob(job: TranslationJob): Promise<void>;
+}
+export type Repositories = TranslationRepo & SessionRepo & ChunkRepo & TranscriptRepo & NoteRepo & AIRepo;
 export function transcriptRow(sessionId: string, data: FinalData, ts = new Date().toISOString()): TranscriptRow {
   return { ...data, session_id: sessionId, revision: 0, updated_at: ts, failed_code: null };
 }
@@ -120,6 +127,28 @@ async function update(db: SQLiteDatabase, table: string, key: string, id: string
 }
 export class SQLiteRepositories implements Repositories {
   constructor(private db: SQLiteDatabase) {}
+  translations(sessionId: string, target: Target) {
+    return this.db.getAllAsync<Translation>('SELECT * FROM translations WHERE session_id=? AND target_lang=? ORDER BY sequence',sessionId,target);
+  }
+  async storeTranslations(sessionId: string, target: Target, rows: Translation[]) {
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      // A late response after deletion must never resurrect session content.
+      if (!await tx.getFirstAsync('SELECT id FROM recording_sessions WHERE id=?',sessionId)) return;
+      await tx.runAsync('DELETE FROM translations WHERE session_id=? AND target_lang=?',sessionId,target);
+      for (const r of rows) if (r.session_id === sessionId && r.target_lang === target) await tx.runAsync(insertSql('translations', r),values(r));
+    });
+  }
+  async translationJobs(owner: string, eventId?: string): Promise<TranslationJob[]> {
+    const rows = await this.db.getAllAsync<Omit<TranslationJob,'session_ids'> & {session_ids: string}>(`SELECT * FROM translation_jobs WHERE owner_uid=?${eventId ? ' AND event_id=?' : ''} ORDER BY created_at DESC,job_id DESC`,eventId ? [owner,eventId] : [owner]);
+    return rows.map(r => ({ ...r, session_ids: JSON.parse(r.session_ids) }));
+  }
+  async putTranslationJob(job: TranslationJob) {
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      for (const id of job.session_ids) if (!await tx.getFirstAsync('SELECT id FROM recording_sessions WHERE id=? AND owner_uid=?',id,job.owner_uid)) return;
+      const row = { ...job, session_ids: JSON.stringify(job.session_ids) };
+      await tx.runAsync(`${insertSql('translation_jobs',row)} ON CONFLICT(job_id) DO UPDATE SET status=excluded.status,error_code=excluded.error_code,updated_at=excluded.updated_at`,values(row));
+    });
+  }
   pendingServerDeletes(owner: string) { return this.db.getAllAsync<PendingServerDelete>('SELECT * FROM pending_server_deletes WHERE owner_uid=?',owner); }
   async clearServerDelete(id: string, owner: string) { await this.db.runAsync('DELETE FROM pending_server_deletes WHERE session_id=? AND owner_uid=?',id,owner); }
   async deleteSessionRows(id: string, owner: string, pending: boolean) {
@@ -127,8 +156,9 @@ export class SQLiteRepositories implements Repositories {
       const session = await tx.getFirstAsync<LocalSession>('SELECT * FROM recording_sessions WHERE id=? AND owner_uid=?',id,owner);
       if (!session) return;
       if (pending) await tx.runAsync('INSERT OR IGNORE INTO pending_server_deletes VALUES (?,?,?)',id,session.event_id,owner);
-      for (const table of ['chunks','transcript_chunks','stream_events','language_events']) await tx.runAsync(`DELETE FROM ${table} WHERE session_id=?`,id);
+      for (const table of ['translations','chunks','transcript_chunks','stream_events','language_events']) await tx.runAsync(`DELETE FROM ${table} WHERE session_id=?`,id);
       await tx.runAsync('DELETE FROM ai_jobs WHERE owner_uid=? AND EXISTS (SELECT 1 FROM json_each(ai_jobs.session_ids) WHERE value=?)',owner,id);
+      await tx.runAsync('DELETE FROM translation_jobs WHERE owner_uid=? AND EXISTS (SELECT 1 FROM json_each(translation_jobs.session_ids) WHERE value=?)',owner,id);
       await tx.runAsync('DELETE FROM recording_sessions WHERE id=? AND owner_uid=?',id,owner);
     });
   }

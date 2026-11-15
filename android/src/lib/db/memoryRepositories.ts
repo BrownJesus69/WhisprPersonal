@@ -1,3 +1,4 @@
+import type { Translation, TranslationJob, Target } from '../translation/types';
 import type { AIJob, BriefDraft, PolishedChunk } from '../ai/types';
 import { normalizeSearch, type Note } from '../notes/model';
 import { languageEventRow, transcriptRow, type NotePatch, type Repositories, type LocalSession, type LocalChunk, type TranscriptRow, type LanguageEventRow } from './repositories';
@@ -5,14 +6,27 @@ import type { LanguageMode, PersistedEvent } from '../live/events';
 
 /** Mirrors uniqueness and atomic progress updates for offline tests. */
 export class MemoryRepositories implements Repositories {
+  private translationRows = new Map<string, Translation>();
+  private translateJobs = new Map<string, TranslationJob>();
+  async translations(id: string, target: Target) { return structuredClone([...this.translationRows.values()].filter(r => r.session_id === id && r.target_lang === target).sort((a,b) => a.sequence-b.sequence)); }
+  async storeTranslations(id: string, target: Target, rows: Translation[]) {
+    if (!this.sessionRows.has(id)) return;
+    for (const [k,r] of this.translationRows) if (r.session_id === id && r.target_lang === target) this.translationRows.delete(k);
+    for (const r of rows) if (r.session_id === id && r.target_lang === target) this.translationRows.set(`${id}:${r.sequence}:${target}`,structuredClone(r));
+  }
+  async translationJobs(owner: string, eventId?: string) { return structuredClone([...this.translateJobs.values()].filter(j => j.owner_uid === owner && (!eventId || j.event_id === eventId)).sort((a,b) => b.created_at.localeCompare(a.created_at) || b.job_id.localeCompare(a.job_id))); }
+  async putTranslationJob(job: TranslationJob) {
+    if (job.session_ids.every(id => this.sessionRows.get(id)?.owner_uid === job.owner_uid)) this.translateJobs.set(job.job_id,structuredClone(job));
+  }
   private deletes = new Map<string, import('./repositories').PendingServerDelete>();
   async pendingServerDeletes(owner: string) { return structuredClone([...this.deletes.values()].filter(d => d.owner_uid === owner)); }
   async clearServerDelete(id: string, owner: string) { if (this.deletes.get(id)?.owner_uid === owner) this.deletes.delete(id); }
   async deleteSessionRows(id: string, owner: string, pending: boolean) {
     const s = this.sessionRows.get(id); if (!s || s.owner_uid !== owner) return;
     if (pending) this.deletes.set(id,{ session_id: id, event_id: s.event_id, owner_uid: owner });
-    for (const rows of [this.chunkRows,this.transcripts,this.languages,this.events]) for (const [key,row] of rows) if (row.session_id === id) rows.delete(key);
+    for (const rows of [this.translationRows,this.chunkRows,this.transcripts,this.languages,this.events]) for (const [key,row] of rows) if (row.session_id === id) rows.delete(key);
     for (const [key,job] of this.jobs) if (job.owner_uid === owner && job.session_ids.includes(id)) this.jobs.delete(key);
+    for (const [key,job] of this.translateJobs) if (job.owner_uid === owner && job.session_ids.includes(id)) this.translateJobs.delete(key);
     this.sessionRows.delete(id);
   }
   private jobs = new Map<string, AIJob>();

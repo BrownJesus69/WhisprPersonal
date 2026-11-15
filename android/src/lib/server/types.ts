@@ -63,8 +63,10 @@ export interface Health {
       ttl_hours: number;
     };
   };
+  translation?: import('../translation/types').TranslationStatus;
+  integrations?: Record<string, { enabled: boolean; status: 'not_configured' | 'disabled'; docs: string }>;
   features: {
-    translation: boolean;
+    translation?: boolean;
     calendar: boolean;
     drive: boolean;
     gmail: boolean;

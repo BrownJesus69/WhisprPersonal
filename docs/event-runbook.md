@@ -253,3 +253,26 @@ Event: __________________ Date/time: ______________ Owner: __________________
 - [ ] Protected export destination and retention/deletion follow-up assigned.
 
 Decision: [ ] Ready  [ ] Defer; unresolved issue: ______________________________
+
+## After the event: translation
+
+1. Wait for the session to show finalized. Translate is hidden during recording and finalizing.
+2. Check Settings → Translation (on your laptop), or refresh Diagnostics for engine directions
+   (`ready_on_disk` / `loaded`) and LibreTranslate pair enabled/eligible/available states.
+3. Open the session or saved transcript, choose English, Kannada, Tamil or Hindi, then Translate.
+   The source language comes from each chunk. AI-polish is optional and off by default; only
+   providers permitted by this event's privacy mode can be used.
+4. Open Translation. Each result shows engine, model/revision, source→target and local date/time.
+   **AI-polished (provider · model)** is an additional block below dedicated engine text.
+   **Emergency English translation from audio (Groq) — no transcript was produced** identifies
+   the opt-in fallback, whose source is `und`; do not treat it as a recovered raw transcript.
+5. Tap Raw at any time to inspect original speech. **Not translated** means the original text
+   is being shown for that part. If the banner says **Translation unavailable; showing the
+   original transcript.**, continue using Raw. Check laptop status and model availability,
+   reconnect, then explicitly request again if the job failed or was interrupted. Never
+   download models during an event. App restart resumes polling existing active jobs.
+6. For sharing, select **Include translation (target)** in Export (default off). The saved
+   translation section follows the transcript, with every line labelled. Review all output.
+
+Future integrations in Settings remain disabled. They need separate owner setup and consent;
+their unconfigured state does not interfere with the event. See [integrations](integrations.md).

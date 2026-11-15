@@ -1,3 +1,4 @@
+import { translationRuntime } from '../translation/runtime';
 import { randomUUID } from 'expo-crypto';
 import { AppState } from 'react-native';
 import { repositories } from '../db/repositories';
@@ -17,6 +18,8 @@ let ownerUid: string | undefined;
 export const aiRuntime = {
   async start(owner: string) {
     const gen = ++generation;
+    await translationRuntime.start(owner);
+    if (gen !== generation) return;
     const old = runner; runner = undefined; ownerUid = undefined; remove?.(); remove = undefined;
     await old?.stop();
     const repo = await repositories();
@@ -31,6 +34,6 @@ export const aiRuntime = {
     const app = AppState.addEventListener('change', state => { if (state === 'active') listeners.forEach(l => l()); });
     remove = () => app.remove(); runner.start();
   },
-  stop() { generation++; const old = runner; runner = undefined; ownerUid = undefined; results.clear(); remove?.(); remove = undefined; return old?.stop(); },
+  async stop() { const translationStop = translationRuntime.stop(); generation++; const old = runner; runner = undefined; ownerUid = undefined; results.clear(); remove?.(); remove = undefined; await Promise.all([old?.stop(), translationStop]); },
   get(owner: string) { return ownerUid === owner ? runner : undefined; },
 };

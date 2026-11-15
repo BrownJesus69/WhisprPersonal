@@ -60,7 +60,7 @@ async function semantics(repo: Repositories) {
   expect(await api.searchAll('x')).toEqual({ notes: [], transcripts: [] });
 }
 test('migration 3 and actual SQLite statements obey same semantics as memory twin', async () => {
-  expect(sql.prepare('PRAGMA user_version').get()?.user_version).toBe(5);
+  expect(sql.prepare('PRAGMA user_version').get()?.user_version).toBe(6);
   await semantics(sqlite); await semantics(new MemoryRepositories());
 });
 test('SQL updates read and write on the same transaction connection', async () => {
