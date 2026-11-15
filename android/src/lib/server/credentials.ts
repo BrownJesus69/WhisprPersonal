@@ -8,9 +8,12 @@ export interface OfflinePass {
   uid: string;
 }
 
+const listeners = new Set<() => void>();
+const changed = () => { for (const listener of listeners) listener(); };
 export const credentials = {
+  onChange: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   getServerKey: () => SecureStore.getItemAsync('whispr.server-key'),
-  setServerKey: (key: string) => SecureStore.setItemAsync('whispr.server-key', key),
+  async setServerKey(key: string) { await SecureStore.setItemAsync('whispr.server-key', key); changed(); },
   async getPass(): Promise<OfflinePass | null> {
     const value = await SecureStore.getItemAsync('whispr.offline-pass');
     if (!value)
@@ -28,6 +31,6 @@ export const credentials = {
       return null;
     }
   },
-  setPass: (pass: OfflinePass) => SecureStore.setItemAsync('whispr.offline-pass', JSON.stringify(pass)),
-  clearPass: () => SecureStore.deleteItemAsync('whispr.offline-pass'),
+  async setPass(pass: OfflinePass) { await SecureStore.setItemAsync('whispr.offline-pass', JSON.stringify(pass)); changed(); },
+  async clearPass() { await SecureStore.deleteItemAsync('whispr.offline-pass'); changed(); },
 };

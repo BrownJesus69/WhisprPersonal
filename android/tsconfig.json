@@ -3,6 +3,7 @@
   "compilerOptions": {
     "types": ["jest", "node", "react"],
     "strict": true,
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": [
         "./src/*"

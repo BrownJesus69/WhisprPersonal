@@ -6,7 +6,9 @@ import { credentials } from '@/lib/server/credentials';
 import { createTokenManager } from '@/lib/server/tokenManager';
 import type { ChunkUploadResponse, SessionResponse, FinalizeResponse } from '@/lib/server/types';
 import type { Repositories, LocalChunk, LocalSession } from '@/lib/db/repositories';
-import { repositories } from '@/lib/db/repositories';
+import { repositories, transcriptRow } from '@/lib/db/repositories';
+import { isFinalData } from '@/lib/live/events';
+import { chunkLanguage } from '@/lib/live/languageOverride';
 import { deleteAudio } from '@/lib/audio/chunkFiles';
 import { updateEventStatus } from '@/lib/firebase/events';
 import { useSettingsStore } from '@/state/settingsStore';
@@ -15,6 +17,11 @@ import { useAuthStore } from '@/state/authStore';
 import { backoff } from './backoff';
 
 const authCodes = new Set(['missing_server_key','invalid_server_key','server_not_configured','account_not_allowed','auth_not_configured','renew_required','auth_token_expired','invalid_token','unauthorized']);
+const listeners = new Set<(sessionId: string) => void>();
+export function onUploadProgress(listener: (sessionId: string) => void) {
+  listeners.add(listener); return () => { listeners.delete(listener); };
+}
+function progress(id: string) { for (const listener of listeners) listener(id); }
 /** While paused, retry once per minute (a still-broken config just pauses again). */
 export const PAUSED_PROBE_MS = 60_000;
 export function outcome(error: unknown): 'pause' | 'permanent' | 'transient' | 'missing' {
@@ -80,6 +87,7 @@ export class UploadService {
       language_mode: s.language_mode, expected_languages: s.expected_languages, model_profile: 'turbo', overlap_ms: s.overlap_ms });
     await this.d.repo.updateSession(s.id, { server_created: 1 });
     s.server_created = 1;
+    progress(s.id);
   }
   private pause(error: unknown) {
     if (outcome(error) !== 'pause') return false;
@@ -96,6 +104,9 @@ export class UploadService {
       await this.ensureSession(s);
       if (this.cancelled) { await repo.updateChunk(c.chunk_id, { status: 'pending' }); return; }
       const form = new FormData();
+      const latest = await repo.session(s.id);
+      const language = latest ? chunkLanguage(latest, c.sequence) : undefined;
+      if (language) form.append('language', language);
       for (const [key, value] of Object.entries({ chunk_id: c.chunk_id, sequence: c.sequence, start_ms: c.start_ms,
         end_ms: c.end_ms, overlap_ms: c.overlap_ms, continues: !!c.continues, sha256: c.sha256 })) form.append(key, String(value));
       form.append('file', { uri: c.uri, name: c.uri.split('/').pop()!, type: 'audio/wav' } as unknown as Blob);
@@ -137,6 +148,7 @@ export class UploadService {
       try {
         if (needsPoll && (this.polls.get(s.id) ?? -Infinity) + 10000 <= this.now()) {
           this.polls.set(s.id, this.now());
+          const observedSeq = (await this.d.repo.session(s.id))?.last_event_seq ?? 0;
           let result: SessionResponse;
           try { result = await this.d.client.get<SessionResponse>(`${this.path(s)}?after_sequence=-1&limit=1000`); }
           catch (e) {
@@ -158,6 +170,7 @@ export class UploadService {
             remote.push(...page);
           }
           for (const remoteChunk of remote) {
+            if (remoteChunk.status === 'done' && isFinalData(remoteChunk)) await this.d.repo.upsertTranscript(transcriptRow(s.id, remoteChunk), observedSeq);
             const local = chunks.find(c => c.chunk_id === remoteChunk.chunk_id);
             if (local && ['uploaded','transcribed'].includes(local.status)) await this.d.repo.updateChunk(local.chunk_id, {
               status: remoteChunk.status === 'done' ? 'transcribed' : local.status,
@@ -165,6 +178,7 @@ export class UploadService {
             });
           }
           chunks = await this.d.repo.chunks(s.id);
+          progress(s.id);
           this.d.connection('connected');
         }
         if (this.cancelled) return false;

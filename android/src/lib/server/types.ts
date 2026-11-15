@@ -8,7 +8,8 @@ export interface ChunkUploadResponse {
 }
 export interface SessionResponse {
   status: string;
-  chunks: { chunk_id: string; sequence: number; status: 'queued' | 'processing' | 'done' | 'failed'; error_code?: string | null }[];
+  chunks: ({ chunk_id: string; sequence: number; status: 'queued' | 'processing' | 'done' | 'failed'; error_code?: string | null } & Partial<import('../live/events').FinalData>)[];
+  last_event_seq?: number;
 }
 export interface FinalizeResponse { status: string; missing_sequences?: number[]; pending?: number }
 

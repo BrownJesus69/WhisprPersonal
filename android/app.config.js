@@ -6,7 +6,7 @@ module.exports = {
     name: 'WhisprPersonal',
     slug: 'whisprpersonal',
     scheme: 'whisprpersonal',
-    version: '0.5.0',
+    version: '0.6.0',
     platforms: ['android'],
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',

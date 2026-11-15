@@ -1,6 +1,7 @@
 import type { SQLiteDatabase, SQLiteBindValue } from 'expo-sqlite';
 import type { LanguageMode } from '@/types/models';
 import { database } from './database';
+import type { FinalData, PersistedEvent } from '../live/events';
 
 export type SessionStatus = 'recording' | 'paused' | 'stopped' | 'interrupted' | 'finalizing' | 'finalized' | 'failed';
 export interface LocalSession {
@@ -9,6 +10,8 @@ export interface LocalSession {
   next_sequence: number; time_ms: number; master_uri: string; server_created: number;
   expected_chunk_count: number | null; finalize_status: string | null; consent_at: string | null;
   created_at: string; updated_at: string; last_error: string | null;
+  last_event_seq?: number; language_override?: LanguageMode; override_from_sequence?: number | null;
+  server_finalized_at?: string | null;
 }
 export type ChunkStatus = 'pending' | 'uploading' | 'uploaded' | 'transcribed' | 'failed_permanent';
 export interface LocalChunk {
@@ -29,7 +32,49 @@ export interface ChunkRepo {
   updateChunk(id: string, patch: Partial<LocalChunk>): Promise<void>;
   resetUploading(owner: string): Promise<void>;
 }
-export type Repositories = SessionRepo & ChunkRepo;
+export interface TranscriptRow extends FinalData {
+  session_id: string; revision: number; updated_at: string; failed_code: string | null;
+}
+export interface LanguageEventRow {
+  session_id: string; seq: number; type: string; language: string | null; from_language: string | null;
+  at_sequence: number | null; confidence: number | null; created_at: string;
+}
+export interface TranscriptRepo {
+  upsertTranscript(row: TranscriptRow, observedSeq?: number): Promise<void>;
+  transcript(sessionId: string): Promise<TranscriptRow[]>;
+  appendLanguageEvent(row: LanguageEventRow): Promise<void>;
+  languageEvents(sessionId: string): Promise<LanguageEventRow[]>;
+  streamEvents(sessionId: string): Promise<PersistedEvent[]>;
+  persistEvent(event: PersistedEvent): Promise<void>;
+  setLastEventSeq(sessionId: string, seq: number): Promise<void>;
+  resetLastEventSeq(sessionId: string): Promise<void>;
+  setLanguageOverride(sessionId: string, mode: LanguageMode, fromSequence: number): Promise<void>;
+}
+export type Repositories = SessionRepo & ChunkRepo & TranscriptRepo;
+export function transcriptRow(sessionId: string, data: FinalData, ts = new Date().toISOString()): TranscriptRow {
+  return { ...data, session_id: sessionId, revision: 0, updated_at: ts, failed_code: null };
+}
+export function languageEventRow(e: PersistedEvent): LanguageEventRow | null {
+  if (e.type === 'language_locked') return { session_id: e.session_id, seq: e.seq, type: e.type, language: e.data.language, from_language: null, at_sequence: e.data.at_sequence, confidence: e.data.confidence, created_at: e.ts };
+  if (e.type === 'language_changed') return { session_id: e.session_id, seq: e.seq, type: e.type, language: e.data.to, from_language: e.data.from, at_sequence: e.data.at_sequence, confidence: null, created_at: e.ts };
+  if (e.type === 'language_override') return { session_id: e.session_id, seq: e.seq, type: e.type, language: e.data.language, from_language: null, at_sequence: null, confidence: null, created_at: e.ts };
+  return null;
+}
+type TranscriptSqlRow = Omit<TranscriptRow, 'segments' | 'language_uncertain' | 'no_speech'> & { segments_json: string; language_uncertain: number; no_speech: number };
+export const TRANSCRIPT_UPSERT = `INSERT INTO transcript_chunks
+  (session_id,sequence,chunk_id,start_ms,end_ms,raw_text,segments_json,detected_language,language_confidence,language_source,language_uncertain,no_speech,failed_code,revision,updated_at)
+  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?) ON CONFLICT(session_id,sequence) DO UPDATE SET
+  chunk_id=excluded.chunk_id,start_ms=excluded.start_ms,end_ms=excluded.end_ms,
+  revision=transcript_chunks.revision + CASE WHEN transcript_chunks.raw_text != excluded.raw_text THEN 1 ELSE 0 END,
+  raw_text=excluded.raw_text,segments_json=excluded.segments_json,detected_language=excluded.detected_language,
+  language_confidence=excluded.language_confidence,language_source=excluded.language_source,
+  language_uncertain=excluded.language_uncertain,no_speech=excluded.no_speech,failed_code=excluded.failed_code,updated_at=excluded.updated_at`;
+async function upsertTranscript(db: SQLiteDatabase, r: TranscriptRow) {
+  await db.runAsync(TRANSCRIPT_UPSERT, [r.session_id,r.sequence,r.chunk_id,r.start_ms,r.end_ms,r.raw_text,JSON.stringify(r.segments),r.detected_language,r.language_confidence,r.language_source,Number(r.language_uncertain),Number(r.no_speech),r.failed_code,r.updated_at]);
+}
+async function appendLanguageEvent(db: SQLiteDatabase, r: LanguageEventRow) {
+  await db.runAsync(`${insertSql('language_events', r)} ON CONFLICT(session_id,seq) DO NOTHING`, values(r));
+}
 type SessionRow = Omit<LocalSession, 'expected_languages'> & { expected_languages: string };
 
 const values = (row: object): SQLiteBindValue[] => Object.values(row) as SQLiteBindValue[];
@@ -43,6 +88,48 @@ async function update(db: SQLiteDatabase, table: string, key: string, id: string
 }
 export class SQLiteRepositories implements Repositories {
   constructor(private db: SQLiteDatabase) {}
+  async upsertTranscript(row: TranscriptRow, observedSeq?: number) {
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      if (observedSeq !== undefined) {
+        const session = await tx.getFirstAsync<{ last_event_seq: number }>('SELECT last_event_seq FROM recording_sessions WHERE id=?', row.session_id);
+        if (!session || session.last_event_seq > observedSeq) return;
+      }
+      await upsertTranscript(tx, row);
+    });
+  }
+  async transcript(id: string): Promise<TranscriptRow[]> {
+    const rows = await this.db.getAllAsync<TranscriptSqlRow>('SELECT * FROM transcript_chunks WHERE session_id=? ORDER BY sequence', id);
+    return rows.map(({ segments_json, ...r }) => ({ ...r, segments: JSON.parse(segments_json), language_uncertain: !!r.language_uncertain, no_speech: !!r.no_speech }));
+  }
+  async appendLanguageEvent(row: LanguageEventRow) { await this.db.withExclusiveTransactionAsync(tx => appendLanguageEvent(tx, row)); }
+  languageEvents(id: string) { return this.db.getAllAsync<LanguageEventRow>('SELECT * FROM language_events WHERE session_id=? ORDER BY seq', id); }
+  async streamEvents(id: string): Promise<PersistedEvent[]> {
+    return (await this.db.getAllAsync<{ event_json: string }>('SELECT event_json FROM stream_events WHERE session_id=? ORDER BY seq', id)).map(r => JSON.parse(r.event_json));
+  }
+  async persistEvent(e: PersistedEvent) {
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      const s = await tx.getFirstAsync<{ last_event_seq: number }>('SELECT last_event_seq FROM recording_sessions WHERE id=?', e.session_id);
+      if (!s || e.seq <= s.last_event_seq) return;
+      if (e.type === 'transcript_final' || e.type === 'transcript_revised') await upsertTranscript(tx, transcriptRow(e.session_id, e.data, e.ts));
+      const language = languageEventRow(e); if (language) await appendLanguageEvent(tx, language);
+      await tx.runAsync('INSERT INTO stream_events (session_id,seq,event_json) VALUES (?,?,?)', e.session_id, e.seq, JSON.stringify(e));
+      if (e.type === 'session_finalized') await tx.runAsync("UPDATE recording_sessions SET status='finalized',server_finalized_at=? WHERE id=?", e.ts, e.session_id);
+      await tx.runAsync('UPDATE recording_sessions SET last_event_seq=MAX(last_event_seq,?) WHERE id=?', e.seq, e.session_id);
+    });
+  }
+  async setLastEventSeq(id: string, seq: number) {
+    await this.db.withExclusiveTransactionAsync(async tx => { await tx.runAsync('UPDATE recording_sessions SET last_event_seq=MAX(last_event_seq,?) WHERE id=?', seq, id); });
+  }
+  async resetLastEventSeq(id: string) {
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      await tx.runAsync('DELETE FROM stream_events WHERE session_id=?', id);
+      await tx.runAsync('DELETE FROM language_events WHERE session_id=?', id);
+      await tx.runAsync('UPDATE recording_sessions SET last_event_seq=0,server_finalized_at=NULL WHERE id=?', id);
+    });
+  }
+  async setLanguageOverride(id: string, mode: LanguageMode, fromSequence: number) {
+    await this.updateSession(id, { language_override: mode, override_from_sequence: fromSequence });
+  }
   async sessions(owner: string) {
     const rows = await this.db.getAllAsync<SessionRow>('SELECT * FROM recording_sessions WHERE owner_uid=? ORDER BY created_at,id', owner);
     return rows.map(r => ({ ...r, expected_languages: JSON.parse(r.expected_languages) as string[] }));

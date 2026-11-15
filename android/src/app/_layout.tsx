@@ -5,6 +5,7 @@ import { attachRecorder, useRecordingStore } from '@/lib/session/recordingStore'
 import { repositories } from '@/lib/db/repositories';
 import { recoverSessions } from '@/lib/session/recovery';
 import { uploadService } from '@/lib/upload/uploadService';
+import { liveController } from '@/lib/live/liveController';
 import { useSettingsStore } from '@/state/settingsStore';
 import { useColorScheme } from 'react-native';
 import { Stack } from 'expo-router';
@@ -17,6 +18,7 @@ import { Banner } from '@/components/Banner';
 import { useAuthStore, type AppUser } from '@/state/authStore';
 
 function RecordingRuntime() {
+  useEffect(() => { liveController.startRuntime(); return () => liveController.stopRuntime(); }, []);
   const native = useSharedAudioRecorder();
   const ref = useRef(native);
   useEffect(() => { ref.current = native; }, [native]);

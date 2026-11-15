@@ -32,5 +32,32 @@ async function open() {
       PRAGMA user_version = 1;
     `);
   });
+  if ((version?.user_version ?? 0) < 2) await db.withExclusiveTransactionAsync(async tx => {
+    await tx.execAsync(`
+      CREATE TABLE transcript_chunks (
+        session_id TEXT NOT NULL REFERENCES recording_sessions(id), sequence INTEGER NOT NULL,
+        chunk_id TEXT NOT NULL, start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL,
+        raw_text TEXT NOT NULL, segments_json TEXT NOT NULL, detected_language TEXT,
+        language_confidence REAL, language_source TEXT NOT NULL, language_uncertain INTEGER NOT NULL,
+        no_speech INTEGER NOT NULL, failed_code TEXT, revision INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL, PRIMARY KEY(session_id, sequence)
+      );
+      CREATE TABLE language_events (
+        session_id TEXT NOT NULL REFERENCES recording_sessions(id), seq INTEGER NOT NULL,
+        type TEXT NOT NULL, language TEXT, from_language TEXT, at_sequence INTEGER,
+        confidence REAL, created_at TEXT NOT NULL, PRIMARY KEY(session_id, seq)
+      );
+      -- Retain validated lifecycle/failure events too, for faithful offline hydration.
+      CREATE TABLE stream_events (
+        session_id TEXT NOT NULL REFERENCES recording_sessions(id), seq INTEGER NOT NULL,
+        event_json TEXT NOT NULL, PRIMARY KEY(session_id, seq)
+      );
+      ALTER TABLE recording_sessions ADD COLUMN last_event_seq INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE recording_sessions ADD COLUMN language_override TEXT NOT NULL DEFAULT 'auto';
+      ALTER TABLE recording_sessions ADD COLUMN override_from_sequence INTEGER;
+      ALTER TABLE recording_sessions ADD COLUMN server_finalized_at TEXT;
+      PRAGMA user_version = 2;
+    `);
+  });
   return db;
 }

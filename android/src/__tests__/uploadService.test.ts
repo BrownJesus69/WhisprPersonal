@@ -3,6 +3,10 @@ import { MemoryRepositories } from '@/lib/db/memoryRepositories';
 import { ServerError } from '@/lib/server/client';
 import type { ServerClient } from '@/lib/server/client';
 import { session, chunk } from './recordingFixtures';
+import { finalData, finalEvent } from './liveFixtures';
+
+const workers: UploadService[] = [];
+afterEach(async () => { await Promise.all(workers.splice(0).map(worker => worker.stop())); });
 
 async function setup(count = 2, stopped = false) {
   const repo = new MemoryRepositories();
@@ -16,6 +20,7 @@ async function setup(count = 2, stopped = false) {
   const removeFile = jest.fn(); const connection = jest.fn(); const eventStatus = jest.fn();
   const worker = new UploadService({ repo, owner: 'owner', client: client as unknown as ServerClient, now: () => now,
     random: () => 1, deleteAfter: () => !retain, removeFile, connection, eventStatus });
+  workers.push(worker);
   return { repo, client, worker, removeFile, connection, eventStatus, advance: (ms: number) => { now += ms; }, deleteAfter: () => { retain = false; } };
 }
 test('creates session once, uploads in sequence; duplicate succeeds', async () => {
@@ -132,4 +137,31 @@ test('stopping during upload never starts a status poll or another upload', asyn
   await t.worker.stop(); release(); await pass;
   expect(t.client.get).not.toHaveBeenCalled();
   expect(await t.worker.tick()).toBe(false); expect(t.client.postMultipart).toHaveBeenCalledTimes(1);
+});
+
+test('offline language override is added from its sequence boundary and Auto omits it', async () => {
+  const t = await setup(3);
+  await t.repo.setLanguageOverride(session().id, 'ta', 1);
+  await t.worker.tick(); await t.worker.tick();
+  await t.repo.setLanguageOverride(session().id, 'auto', 2); await t.worker.tick();
+  const forms = t.client.postMultipart.mock.calls as unknown as [string, FormData][];
+  expect(forms.map(([,form]) => form.get('language'))).toEqual([null, 'ta', null]);
+  await t.worker.stop();
+});
+
+test('poll upserts done transcript idempotently without advancing stream cursor', async () => {
+  const t = await setup(1);
+  t.client.get.mockResolvedValue({ status: 'active', chunks: [{ ...finalData(), status: 'done' }] } as never);
+  await t.worker.tick(); expect(await t.repo.transcript(session().id)).toHaveLength(1);
+  expect((await t.repo.session(session().id))?.last_event_seq).toBe(0);
+  expect((await t.repo.transcript(session().id))[0].revision).toBe(0); await t.worker.stop();
+});
+
+test('stale HTTP snapshot cannot replace a newer WebSocket revision', async () => {
+  const t = await setup(1);
+  t.client.get.mockImplementation(async () => {
+    await t.repo.persistEvent(finalEvent(1, { raw_text: 'new revision' }, true));
+    return { status: 'active', chunks: [{ ...finalData(), status: 'done' }] } as never;
+  });
+  await t.worker.tick(); expect((await t.repo.transcript(session().id))[0].raw_text).toBe('new revision'); await t.worker.stop();
 });

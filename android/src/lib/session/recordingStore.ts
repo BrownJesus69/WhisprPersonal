@@ -14,6 +14,7 @@ import type { EventModel } from '@/types/models';
 
 export type RecordingPhase = 'idle' | 'requesting_permission' | 'ready' | 'recording' | 'paused' | 'stopping' | 'stopped' | 'error';
 interface RecordingState {
+  nextChunkSequence: () => number;
   phase: RecordingPhase; sessionId: string | null; elapsedMs: number; dbfs: number;
   message: string; warning: string; busy: boolean;
   start: (session: LocalSession, title: string, consent: boolean) => Promise<void>;
@@ -53,6 +54,7 @@ export function createRecordingStore(d: Dependencies) {
       if (live && chunker) await (await d.repo()).updateSession(live.id, { next_sequence: chunker.nextSequence, time_ms: chunker.timeMs });
     };
     return {
+      nextChunkSequence: () => chunker?.nextSequence ?? 0,
       phase: 'idle', sessionId: null, elapsedMs: 0, dbfs: -96, message: '', warning: '', busy: false,
       async start(session, title, consent) {
         if (get().busy || nativeActive || ['recording','paused','stopping'].includes(get().phase)) return;

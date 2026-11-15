@@ -1,12 +1,18 @@
-import { useState } from 'react';
-import { Text } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Platform, ScrollView, Text, ToastAndroid, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Button } from '@/components/Button';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Screen } from '@/components/Screen';
 import { Banner } from '@/components/Banner';
 import { Card } from '@/components/Card';
-import { ConnectionPill } from '@/components/ConnectionPill';
+import { LiveStatusPill } from '@/components/LiveStatusPill';
+import { LanguageBadge, languageName } from '@/components/LanguageBadge';
+import { LanguagePicker } from '@/components/LanguagePicker';
+import { TranscriptTabs } from '@/components/TranscriptTabs';
+import { TranscriptList } from '@/components/TranscriptList';
+import { liveController } from '@/lib/live/liveController';
+import { emptyView, useTranscriptStore } from '@/lib/live/transcriptStore';
 import { ConsentDialog } from '@/components/ConsentDialog';
 import { LevelMeter } from '@/components/LevelMeter';
 import { QueueStatus } from '@/components/QueueStatus';
@@ -37,6 +43,8 @@ export default function SessionScreen() {
     }
   });
   const session = query.data?.session;
+  const live = useTranscriptStore(s => s.sessions[sessionId] ?? emptyView);
+  useEffect(() => { if (session?.owner_uid === uid) return liveController.acquire(sessionId); }, [session?.owner_uid, sessionId, uid]);
   const event = useQuery({ queryKey: ['event', uid, session?.event_id], enabled: !!session && !!uid,
     queryFn: () => getEvent(session!.event_id, uid!) });
   const own = recording.sessionId === sessionId;
@@ -45,11 +53,15 @@ export default function SessionScreen() {
   const phase = own ? recording.phase : !session?.consent_at || recovered ? 'ready' : 'stopped';
   const elapsed = own ? recording.elapsedMs : session?.time_ms ?? 0;
   const act = (action: () => Promise<unknown>) => { void action().catch(() => setError('Could not update this session. Please reopen it and try again.')); };
-  return <Screen title={event.data?.title ?? 'Recording session'}>
-    <ConnectionPill />
+  return <Screen scroll={false} title={event.data?.title ?? 'Recording session'}>
     {query.isPending && <Banner message="Loading saved audio…" />}
     {(query.error || error) && <Banner error message={error || 'Could not open this local session.'} />}
     {session && <>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        <LiveStatusPill status={live.status} attempt={live.attempt} />
+        <LanguageBadge language={live.model.language} />
+      </View>
+      <ScrollView style={{ maxHeight: '45%' }} contentContainerStyle={{ gap: 8 }}>
       <Card>
         <Text accessibilityRole="timer" style={{ ...typography.title, color: t.text, fontVariant: ['tabular-nums'] }}>{Math.floor(elapsed / 3600000).toString().padStart(2,'0')}:{Math.floor(elapsed / 60000 % 60).toString().padStart(2,'0')}:{Math.floor(elapsed / 1000 % 60).toString().padStart(2,'0')}</Text>
         <Text style={{ ...typography.body, color: t.muted }}>{own ? recording.phase : !session.consent_at ? 'Ready' : session.status}</Text>
@@ -75,7 +87,16 @@ export default function SessionScreen() {
         })}
       />}
       <QueueStatus chunks={query.data?.chunks ?? []} offline={['disconnected','error'].includes(connection)} retry={() => act(async () => { await uploadService.retryFailed(sessionId); })} />
-      <Card><Text style={{ ...typography.body, color: t.muted }}>Live transcript arrives in the next update</Text></Card>
+      {!['stopped', 'finalized'].includes(session.status) && <LanguagePicker mode={live.model.language.mode} onSelect={mode => act(async () => {
+        await liveController.setOverride(sessionId, mode);
+        if (Platform.OS === 'android') ToastAndroid.show('Applies from the next chunk', ToastAndroid.SHORT);
+      })} />}
+      </ScrollView>
+      <TranscriptTabs />
+      {!!live.model.language.timeline.length && <ScrollView horizontal style={{ flexGrow: 0 }} accessibilityLabel="Language timeline">
+        <Text selectable style={{ ...typography.label, color: t.muted }}>{live.model.language.timeline.map(s => `${languageName(s.language)} (${s.fromSequence + 1}–${s.toSequence + 1})`).join(' → ')}</Text>
+      </ScrollView>}
+      <TranscriptList model={live.model} chunkStarts={Object.fromEntries((query.data?.chunks ?? []).map(c => [c.sequence, c.start_ms]))} />
       <ConsentDialog visible={consent} cancel={() => setConsent(false)} confirm={() => {
         setConsent(false); act(() => recording.start(session, event.data?.title ?? 'Event recording', true));
       }} />

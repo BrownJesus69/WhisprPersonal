@@ -197,6 +197,70 @@ Files are `{sequence}_{startMs}_{endMs}_{headOverlapMs}_{c|e}.wav`. `c` means a 
 that continues a run; `e` means the final partial chunk. Upload their metadata and file to the
 laptop contract to verify stitching. Existing output files are never overwritten.
 
+## Live transcript (0.6.0)
+
+The session screen displays **Raw** partial text while the laptop decodes a chunk, then
+replaces it with finalized text. Seam revisions replace the same row; an updated indicator
+lasts 550 ms and is suppressed with Reduce Motion. Timestamps use the session timeline;
+partial times are translated from the chunk's local start. Silent chunks are hidden with a
+count, and failed parts keep an explicit error code. Scroll upward to read earlier text;
+**Jump to live** resumes following new text. Android's system font scaling applies to the
+existing typography. The language badge shows detection confidence, an uncertainty marker,
+or the forced language. A language timeline groups consecutive non-silent detections.
+
+**Auto / Kannada / Tamil / Hindi / English applies from the next chunk; works offline.**
+The picker saves the mode and the recorder's next sequence before contacting the laptop.
+Uploads at or beyond that boundary include the selected language, even if the laptop was
+unreachable when it was selected. Auto omits that upload field. The app also sends the mode
+over the open stream, falls back to HTTP, and retries the durable intention on reconnect.
+Existing transcript text is retained; overrides do not rewrite earlier chunks. Stopped and
+finalized sessions show saved transcripts read-only.
+
+The **Polished** tab is disabled until Phase 8. Cleanup arrives with Cloud AI later; raw
+transcripts are always kept unchanged. This release makes no cleanup or other LLM calls.
+
+The header-authenticated WebSocket resumes from the last durably saved event sequence.
+Migration 2 adds transcript rows, language events and session cursors/override metadata.
+A small additional `stream_events` journal retains validated lifecycle and failure events
+for faithful offline hydration. Each event, its transcript/language changes and cursor are
+committed in one exclusive SQLite transaction. Duplicate replay is ignored. A lower server
+cursor resets the local cursor/journal and requests replay; saved transcript rows remain
+available during recovery. HTTP upload-status polling also saves completed transcripts
+without advancing the stream cursor, and ignores snapshots overtaken by stream events.
+
+The stream stays active while this session screen is open or recording is active, including
+navigation away from the screen. It disconnects once finalization and replay are synced.
+Foreground/network recovery triggers an immediate reconnect. A 50-second inbound watchdog
+detects a stalled connection. Network errors retry with full jitter in a 1–30-second
+exponential envelope, subscriber overflow retries immediately, a missing laptop session
+retries every 30 seconds, and rate limiting waits at least 10 seconds. The attempt count
+resets after 30 healthy seconds. Authentication refresh is attempted once; a second rejection
+shows **Sign-in renewal needed** until credentials change. Access denial shows **Not allowed**.
+Server keys and bearer tokens appear only in request headers; code-only diagnostics contain
+no transcript text or credentials. Saved finals remain readable after restarting offline.
+
+### Architect stream check (requires a running laptop)
+
+Node 24 imports the production stream client, validator and reducer directly, using a
+header-capable socket factory. Generate chunks with the command above, then supply your
+own existing values through shell variables:
+
+```powershell
+node --experimental-strip-types scripts/live-stream-check.ts --server http://127.0.0.1:8770 --key $serverKey --token $bearer --session $sessionId --event $eventId --chunks output-chunks --overlap 1200 --language ta
+```
+
+`--language` is optional. The driver creates the session idempotently, uploads filename
+metadata plus SHA-256 and WAV files, forces one overflow-style reconnect, waits for finals,
+finalizes, and prints applied event sequences, reduced raw text and language state. It
+fails if an applied sequence is duplicated, missing or unordered. It does not load app
+credentials or native modules. The laptop integration run is intentionally separate from
+offline Jest checks and needs valid credentials supplied by the architect.
+
+Device QA still covers real WS headers over Wi-Fi/Tailscale, navigating away while
+recording, background/foreground suspension, laptop restart/cursor reset, offline override
+and reconnection, selectable Kannada/Tamil/Hindi text, system large fonts, TalkBack,
+Reduce Motion, transcript scrolling and visible revision updates.
+
 ## Offline verification commands
 
 ```powershell
