@@ -5,7 +5,7 @@
 
 ## Goal
 
-Create the EventScribe monorepo skeleton and a production-quality FastAPI server foundation
+Create the WhisprPersonal monorepo skeleton and a production-quality FastAPI server foundation
 (config, structured logging, error taxonomy, security middleware skeleton, `/health`,
 Docker Compose, launchers, tests) that later phases plug Firebase, Whisper, and LLMs into.
 
@@ -129,7 +129,7 @@ Dev: `pytest==9.2.0`, `ruff==0.17.5`. Do not add other dependencies.
   `session_id`, `chunk_id` from contextvars when set, plus any `extra={"event": ..., ...}`
   keys). `console` format = human readable, same fields.
 - `RedactingFilter` applied to the handler: scrubs `Bearer <token>` → `Bearer [REDACTED]`,
-  values of the `X-EventScribe-Server-Key` header, `-----BEGIN ... PRIVATE KEY-----` blocks,
+  values of the `X-WhisprPersonal-Server-Key` header, `-----BEGIN ... PRIVATE KEY-----` blocks,
   and long secret-like strings with known prefixes (`gsk_`, `sk-`, `AIza`). Also scrubs any
   secret value from the active Settings (register them at configure time) wherever it appears.
 - Exceptions: include `exc_type` and a traceback in logs (server-side only), never in responses.
@@ -176,7 +176,7 @@ Dev: `pytest==9.2.0`, `ruff==0.17.5`. Do not add other dependencies.
   dependency (keyed by verified uid) for Phase 2+. 429 `rate_limited` with an integer
   `Retry-After` header (ceil, min 1). `/health` is limited too.
 - `shared_secret.py`: FastAPI dependency `require_server_key`. Header
-  `X-EventScribe-Server-Key`. Secret unset → 503 `server_not_configured`; header missing →
+  `X-WhisprPersonal-Server-Key`. Secret unset → 503 `server_not_configured`; header missing →
   401 `missing_server_key`; mismatch → 401 `invalid_server_key`. Compare with
   `hmac.compare_digest` on UTF-8 bytes.
 - `auth.py`:
@@ -241,7 +241,7 @@ body limit → rate limit → (CORS if configured) → app.
   `settings.safe_summary()`, detect GPU, set `app.state.settings`, `server_state`,
   `token_verifier = DisabledTokenVerifier()`, rate limiters; on shutdown log
   `event="shutdown"` (Phase 3 will drain the queue here). `docs_url`/`openapi_url` disabled
-  when `enable_api_docs` is False. Title "EventScribe Server", version from `app.__version__`.
+  when `enable_api_docs` is False. Title "WhisprPersonal Server", version from `app.__version__`.
 - Creating the app must not require a `.env` file to exist and must not touch the network.
 
 ### cli.py (`python -m app.cli <command>`, argparse)
@@ -259,17 +259,17 @@ body limit → rate limit → (CORS if configured) → app.
   CUDA 12 + cuDNN 9 is what faster-whisper/CTranslate2 4.x need in Phase 3). Install
   `python3 python3-venv python3-pip ca-certificates` (Ubuntu 24.04 ships Python 3.12) with
   `--no-install-recommends`, clean apt lists. Venv at `/opt/venv`. Non-root user
-  `eventscribe` (uid/gid 10001). `ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+  `whisprpersonal` (uid/gid 10001). `ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
   MODELS_DIR=/models DATA_DIR=/data HF_HOME=/models/hf`. Copy requirements first (layer
   cache), then `app/`. `/models` and `/data` owned by the user. `EXPOSE 8000`.
   `HEALTHCHECK` using python urllib against `http://127.0.0.1:8000/health`.
   `CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000","--workers","1",
   "--no-server-header"]` (single worker: the Whisper model lives in one process).
 - `docker-compose.yml` (CPU-safe base; works on macOS/Kali/Windows without NVIDIA):
-  service `server`, `build: .`, `image: eventscribe-server:local`, `env_file: .env`,
+  service `server`, `build: .`, `image: whisprpersonal-server:local`, `env_file: .env`,
   `environment: MODELS_DIR=/models, DATA_DIR=/data`,
-  `ports: ["${EVENTSCRIBE_BIND:-0.0.0.0}:${EVENTSCRIBE_PORT:-8000}:8000"]`,
-  volumes `./models:/models`, `./data:/data`, `../secrets:/run/secrets/eventscribe:ro`,
+  `ports: ["${WHISPRPERSONAL_BIND:-0.0.0.0}:${WHISPRPERSONAL_PORT:-8000}:8000"]`,
+  volumes `./models:/models`, `./data:/data`, `../secrets:/run/secrets/whisprpersonal:ro`,
   `restart: unless-stopped`, `security_opt: [no-new-privileges:true]`, `cap_drop: [ALL]`,
   `stop_grace_period: 30s`, logging json-file with max-size 10m / max-file 5.
 - `docker-compose.gpu.yml`: override adding
@@ -279,7 +279,7 @@ body limit → rate limit → (CORS if configured) → app.
 ### .env.example
 Every Settings field, grouped with comments. Secrets and model names EMPTY. Include:
 `FIREBASE_CREDENTIALS_PATH=` with a comment that the launcher fills it with
-`/run/secrets/eventscribe/<file>.json` when exactly one JSON file exists in `../secrets/`;
+`/run/secrets/whisprpersonal/<file>.json` when exactly one JSON file exists in `../secrets/`;
 `SERVER_SHARED_SECRET=` (launcher generates it); `GROQ_MODEL=` / `SAMBANOVA_MODEL=` with a
 comment "choose a model your account can access; see provider docs — no default is assumed".
 No real-looking placeholder keys.
@@ -293,7 +293,7 @@ No real-looking placeholder keys.
   2. If `.env` missing: copy `.env.example`; generate a shared secret with
      `[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes(...)` →
      base64url (48 bytes); set `SERVER_SHARED_SECRET=`; if exactly one `*.json` in
-     `..\secrets\`, set `FIREBASE_CREDENTIALS_PATH=/run/secrets/eventscribe/<name>`.
+     `..\secrets\`, set `FIREBASE_CREDENTIALS_PATH=/run/secrets/whisprpersonal/<name>`.
      **Write with `[IO.File]::WriteAllText($path, $text, (New-Object
      System.Text.UTF8Encoding $false))` — no BOM.** Never print the secret except once with a
      clear "enter this in the app's Settings; it is NOT in the QR code" message.
@@ -311,7 +311,7 @@ No real-looking placeholder keys.
      `docker compose exec -T server python -m app.cli qr <url>`.
   9. Print model/queue status (from health JSON) and a note that model loading arrives in
      Phase 3. Open `http://localhost:<port>/docs` with `Start-Process`.
-  Port comes from `EVENTSCRIBE_PORT` env or 8000.
+  Port comes from `WHISPRPERSONAL_PORT` env or 8000.
 - `start.sh` (bash, `set -euo pipefail`, Linux + macOS): same steps. Secret via
   `python3 -c 'import secrets;print(secrets.token_urlsafe(48))'` or `openssl rand -base64 48 |
   tr '+/' '-_' | tr -d '='`. `sed -i.bak` portable edits (delete .bak). GPU override only if

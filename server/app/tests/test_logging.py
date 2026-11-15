@@ -27,7 +27,7 @@ def test_json_context_and_redaction(make_settings: Any) -> None:
             provider,
             pem,
             private,
-            extra={"event": "test", "header": f"X-EventScribe-Server-Key: {private}"},
+            extra={"event": "test", "header": f"X-WhisprPersonal-Server-Key: {private}"},
         )
     finally:
         request_id_var.reset(token)
@@ -46,7 +46,7 @@ def test_exception_extra_redaction() -> None:
     record = logging.makeLogRecord(
         {
             "msg": "failure",
-            "extra_data": "X-EventScribe-Server-Key: sensitive-header-value",
+            "extra_data": "X-WhisprPersonal-Server-Key: sensitive-header-value",
         }
     )
     assert "sensitive-header-value" not in formatter.format(record)

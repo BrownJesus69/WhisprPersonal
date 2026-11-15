@@ -29,7 +29,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configure_logging(settings)
-        logger = logging.getLogger("eventscribe")
+        logger = logging.getLogger("whisprpersonal")
         logger.info(
             "Server starting", extra={"event": "startup", "config": settings.safe_summary()}
         )
@@ -49,7 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             logger.info("Server stopping", extra={"event": "shutdown"})
 
     app = FastAPI(
-        title="EventScribe Server",
+        title="WhisprPersonal Server",
         version=__version__,
         lifespan=lifespan,
         docs_url="/docs" if settings.enable_api_docs else None,
@@ -69,7 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_headers=[
                 "Authorization",
                 "Content-Type",
-                "X-EventScribe-Server-Key",
+                "X-WhisprPersonal-Server-Key",
                 "X-Request-ID",
             ],
             expose_headers=["X-Request-ID", "Retry-After"],

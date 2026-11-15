@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------
-# EventScribe — secrets and credentials (NEVER commit)
+# WhisprPersonal — secrets and credentials (NEVER commit)
 # ---------------------------------------------------------------
 secrets/
 *.env

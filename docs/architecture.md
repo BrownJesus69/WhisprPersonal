@@ -1,6 +1,6 @@
 # Architecture
 
-EventScribe keeps planned transcription on a laptop, with an Android client connecting
+WhisprPersonal keeps planned transcription on a laptop, with an Android client connecting
 over LAN or Tailscale. Optional cloud providers enhance derived text in later phases.
 
 ```text

@@ -56,7 +56,7 @@ def test_verified_user_limit(make_settings: Any) -> None:
         app.state.token_verifier = FakeTokenVerifier()
         headers = {
             "Authorization": "Bearer good-token",
-            "X-EventScribe-Server-Key": settings.server_shared_secret.get_secret_value(),
+            "X-WhisprPersonal-Server-Key": settings.server_shared_secret.get_secret_value(),
         }
         assert client.get("/user", headers=headers).status_code == 200
         assert client.get("/user", headers=headers).status_code == 429

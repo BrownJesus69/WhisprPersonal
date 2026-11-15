@@ -11,7 +11,7 @@ from app.schemas.health import HealthResponse
 
 
 def main(argv: list[str] | None = None, *, transport: httpx.BaseTransport | None = None) -> int:
-    parser = argparse.ArgumentParser(description="EventScribe server tools")
+    parser = argparse.ArgumentParser(description="WhisprPersonal server tools")
     commands = parser.add_subparsers(dest="command", required=True)
     qr = commands.add_parser("qr")
     qr.add_argument("url")

@@ -11,7 +11,7 @@ from app.tests.conftest import FakeTokenVerifier
 def test_missing_and_wrong(client: TestClient) -> None:
     for headers, code in (
         ({}, "missing_server_key"),
-        ({"X-EventScribe-Server-Key": "wrong"}, "invalid_server_key"),
+        ({"X-WhisprPersonal-Server-Key": "wrong"}, "invalid_server_key"),
     ):
         response = client.get("/api/v1/diagnostics", headers=headers)
         assert response.status_code == 401
@@ -33,7 +33,7 @@ def test_diagnostics(app: FastAPI, client: TestClient, settings: Settings) -> No
     response = client.get(
         "/api/v1/diagnostics",
         headers={
-            "X-EventScribe-Server-Key": secret,
+            "X-WhisprPersonal-Server-Key": secret,
             "Authorization": "Bearer good-token",
         },
     )

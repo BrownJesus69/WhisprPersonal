@@ -1,4 +1,4 @@
-# EventScribe Server
+# WhisprPersonal Server
 
 FastAPI foundation for a single laptop inference process. Phase 1 implements health,
 protected diagnostics, typed settings, redacting logs, bounded HTTP middleware, local GPU

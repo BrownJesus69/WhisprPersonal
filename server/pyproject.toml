@@ -1,7 +1,7 @@
 [project]
-name = "eventscribe-server"
+name = "whisprpersonal-server"
 version = "0.1.0"
-description = "EventScribe LAN inference server"
+description = "WhisprPersonal LAN inference server"
 requires-python = ">=3.11"
 
 [tool.ruff]

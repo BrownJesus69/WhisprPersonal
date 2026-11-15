@@ -20,7 +20,7 @@ if [[ ! -e .env ]]; then
   if [[ ${#credential_files[@]} -eq 1 && -f "${credential_files[0]}" ]]; then
     credential_name=${credential_files[0]##*/}
     if [[ $credential_name =~ ^[A-Za-z0-9_.-]+\.json$ ]]; then
-      sed -i.bak "s|^FIREBASE_CREDENTIALS_PATH=.*|FIREBASE_CREDENTIALS_PATH=/run/secrets/eventscribe/$credential_name|" .env
+      sed -i.bak "s|^FIREBASE_CREDENTIALS_PATH=.*|FIREBASE_CREDENTIALS_PATH=/run/secrets/whisprpersonal/$credential_name|" .env
       rm -f -- .env.bak
     fi
   fi
@@ -36,10 +36,10 @@ if command -v nvidia-smi >/dev/null && nvidia-smi >/dev/null 2>&1 &&
   compose_files+=(-f docker-compose.gpu.yml)
 fi
 docker compose "${compose_files[@]}" up -d --build
-port=${EVENTSCRIBE_PORT:-}
+port=${WHISPRPERSONAL_PORT:-}
 if [[ -z $port ]]; then
   # Read only the numeric Compose port; never source a dotenv file as shell code.
-  port=$(sed -n 's/^EVENTSCRIBE_PORT=\([0-9][0-9]*\)[[:space:]]*$/\1/p' .env | tail -n 1)
+  port=$(sed -n 's/^WHISPRPERSONAL_PORT=\([0-9][0-9]*\)[[:space:]]*$/\1/p' .env | tail -n 1)
   port=${port:-8000}
 fi
 health_ready=false

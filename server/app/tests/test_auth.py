@@ -11,7 +11,7 @@ def test_missing_token(client: TestClient, settings: Settings, authorization: st
     response = client.get(
         "/api/v1/diagnostics",
         headers={
-            "X-EventScribe-Server-Key": settings.server_shared_secret.get_secret_value(),
+            "X-WhisprPersonal-Server-Key": settings.server_shared_secret.get_secret_value(),
             "Authorization": authorization,
         },
     )
@@ -21,7 +21,7 @@ def test_missing_token(client: TestClient, settings: Settings, authorization: st
 
 def test_disabled_and_bad(app: FastAPI, client: TestClient, settings: Settings) -> None:
     headers = {
-        "X-EventScribe-Server-Key": settings.server_shared_secret.get_secret_value(),
+        "X-WhisprPersonal-Server-Key": settings.server_shared_secret.get_secret_value(),
         "Authorization": "bEaReR bad-token",
     }
     response = client.get("/api/v1/diagnostics", headers=headers)

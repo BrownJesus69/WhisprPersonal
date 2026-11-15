@@ -1,17 +1,17 @@
 services:
   server:
     build: .
-    image: eventscribe-server:local
+    image: whisprpersonal-server:local
     env_file: .env
     environment:
       MODELS_DIR: /models
       DATA_DIR: /data
     ports:
-      - "${EVENTSCRIBE_BIND:-0.0.0.0}:${EVENTSCRIBE_PORT:-8000}:8000"
+      - "${WHISPRPERSONAL_BIND:-0.0.0.0}:${WHISPRPERSONAL_PORT:-8000}:8000"
     volumes:
       - ./models:/models
       - ./data:/data
-      - ../secrets:/run/secrets/eventscribe:ro
+      - ../secrets:/run/secrets/whisprpersonal:ro
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

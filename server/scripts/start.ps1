@@ -26,7 +26,7 @@ if (-not (Test-Path -LiteralPath $envPath)) {
         $credentialName = $credentialFiles[0].Name
         # Only use filenames safe for dotenv values. Never read a credential file.
         if ($credentialName -match '^[A-Za-z0-9_.-]+\.json$') {
-            $text = $text -replace '(?m)^FIREBASE_CREDENTIALS_PATH=.*$', "FIREBASE_CREDENTIALS_PATH=/run/secrets/eventscribe/$credentialName"
+            $text = $text -replace '(?m)^FIREBASE_CREDENTIALS_PATH=.*$', "FIREBASE_CREDENTIALS_PATH=/run/secrets/whisprpersonal/$credentialName"
         }
     }
     [IO.File]::WriteAllText($envPath, $text, (New-Object System.Text.UTF8Encoding $false))
@@ -45,11 +45,11 @@ if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
 $port = 8000
-if ($env:EVENTSCRIBE_PORT) { $port = [int]$env:EVENTSCRIBE_PORT }
+if ($env:WHISPRPERSONAL_PORT) { $port = [int]$env:WHISPRPERSONAL_PORT }
 # Keep the port consistent with Compose's .env interpolation without changing the file.
 elseif (Test-Path -LiteralPath $envPath) {
     foreach ($line in [IO.File]::ReadAllLines($envPath)) {
-        if ($line -match '^EVENTSCRIBE_PORT=(\d+)\s*$') { $port = [int]$Matches[1] }
+        if ($line -match '^WHISPRPERSONAL_PORT=(\d+)\s*$') { $port = [int]$Matches[1] }
     }
 }
 $health = $null

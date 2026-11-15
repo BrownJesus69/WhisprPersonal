@@ -1,7 +1,7 @@
-# AGENTS.md — EventScribe
+# AGENTS.md — WhisprPersonal
 
 Rules for any agent (Claude, Codex, humans) working in this repository.
-Repository root: `E:\Whispr` (this is the `eventscribe/` monorepo root).
+Repository root: `E:\Whispr` (this is the `whisprpersonal/` monorepo root).
 
 ## Layout
 

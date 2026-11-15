@@ -5,7 +5,7 @@ at `/redoc`, and the schema at `/openapi.json` when `ENABLE_API_DOCS=true`. Thes
 are behind network/body/rate middleware. Turn them off for a deployment that does not need
 them. Responses use UTC timestamps and JSON.
 
-Protected requests require `X-EventScribe-Server-Key` and `Authorization: Bearer <ID token>`.
+Protected requests require `X-WhisprPersonal-Server-Key` and `Authorization: Bearer <ID token>`.
 The Bearer scheme is case insensitive; empty or malformed tokens count as missing.
 The shared key is always checked first. No real tokens can pass Phase 1's disabled verifier.
 Use an optional `X-Request-ID` matching `[A-Za-z0-9-]{8,64}`; otherwise a UUID hex ID is

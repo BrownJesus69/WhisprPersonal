@@ -8,16 +8,16 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-venv python3-pip ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/venv \
-    && groupadd --gid 10001 eventscribe \
-    && useradd --uid 10001 --gid 10001 --create-home eventscribe \
+    && groupadd --gid 10001 whisprpersonal \
+    && useradd --uid 10001 --gid 10001 --create-home whisprpersonal \
     && mkdir -p /models /data /app \
-    && chown eventscribe:eventscribe /models /data /app
+    && chown whisprpersonal:whisprpersonal /models /data /app
 
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY --chown=eventscribe:eventscribe app/ ./app/
-USER eventscribe
+COPY --chown=whisprpersonal:whisprpersonal app/ ./app/
+USER whisprpersonal
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).close()"

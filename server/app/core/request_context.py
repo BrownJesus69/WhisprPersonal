@@ -40,7 +40,7 @@ class RequestContextMiddleware:
             await self.app(scope, receive, wrapped_send)
         finally:
             if scope["type"] == "http":
-                logging.getLogger("eventscribe.access").info(
+                logging.getLogger("whisprpersonal.access").info(
                     "HTTP request",
                     extra={
                         "event": "http_request",

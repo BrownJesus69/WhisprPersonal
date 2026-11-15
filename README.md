@@ -1,6 +1,6 @@
-# EventScribe
+# WhisprPersonal
 
-EventScribe is a planned Android event transcription app backed by a laptop inference
+WhisprPersonal is a planned Android event transcription app backed by a laptop inference
 server. Phase 1 provides the FastAPI foundation, local status checks, security boundaries,
 operator tools, and deployment scaffolding. It does not transcribe audio yet.
 

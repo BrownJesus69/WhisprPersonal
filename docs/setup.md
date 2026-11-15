@@ -88,7 +88,7 @@ remain `not_configured`; configured providers report `configured_unchecked` with
 | PORT | 8000 | Application configuration; pass Uvicorn `--port` separately for non-Docker |
 | ENABLE_API_DOCS | true | Enables /docs, /redoc, /openapi.json |
 | SERVER_SHARED_SECRET | empty | SecretStr, at least 32 characters when set |
-| FIREBASE_CREDENTIALS_PATH | empty | Local file or `/run/secrets/eventscribe/<file>.json`; only existence checked |
+| FIREBASE_CREDENTIALS_PATH | empty | Local file or `/run/secrets/whisprpersonal/<file>.json`; only existence checked |
 | FIREBASE_PROJECT_ID | empty | Reserved for Phase 2 |
 | GROQ_API_KEY | empty | Optional SecretStr |
 | GROQ_BASE_URL | https://api.groq.com/openai/v1 | Reserved provider endpoint |
@@ -133,9 +133,9 @@ remain `not_configured`; configured providers report `configured_unchecked` with
 Default CIDRs: `127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10,::1/128,fc00::/7,fe80::/10`.
 An empty network list denies every peer, including Docker health checks.
 
-`EVENTSCRIBE_BIND` (default `0.0.0.0`) and `EVENTSCRIBE_PORT` (default `8000`) are Compose
+`WHISPRPERSONAL_BIND` (default `0.0.0.0`) and `WHISPRPERSONAL_PORT` (default `8000`) are Compose
 host settings, not Settings fields. Shell environment values override Compose `.env` values.
-Launchers also read a numeric `EVENTSCRIBE_PORT` from server `.env` if it is absent from the
+Launchers also read a numeric `WHISPRPERSONAL_PORT` from server `.env` if it is absent from the
 shell, keeping the polling URL consistent. Docker always listens on container port 8000.
 `HF_HOME=/models/hf` is set by the image for later model caching.
 
@@ -145,7 +145,7 @@ Confirm that your trusted event LAN uses the Private Windows network profile. Fr
 Administrator PowerShell, create a narrowly scoped rule (change the port if needed):
 
 ```powershell
-New-NetFirewallRule -DisplayName 'EventScribe LAN' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000 -Profile Private -RemoteAddress LocalSubnet
+New-NetFirewallRule -DisplayName 'WhisprPersonal LAN' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000 -Profile Private -RemoteAddress LocalSubnet
 ```
 
 Do not enable it for Public or Domain profiles. Tailscale may need a separately scoped
@@ -153,7 +153,7 @@ Private-profile rule for the intended Tailscale peer addresses. Never open a rou
 or expose this HTTP endpoint publicly. To remove the rule after use:
 
 ```powershell
-Remove-NetFirewallRule -DisplayName 'EventScribe LAN'
+Remove-NetFirewallRule -DisplayName 'WhisprPersonal LAN'
 ```
 
 ## Verification and troubleshooting

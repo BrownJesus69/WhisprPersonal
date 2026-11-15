@@ -23,7 +23,7 @@ class RedactingFilter(logging.Filter):
             value = value.replace(secret, "[REDACTED]")
         value = re.sub(r"Bearer\s+[^\s\"',;]+", "Bearer [REDACTED]", value, flags=re.I)
         value = re.sub(
-            r"(X-EventScribe-Server-Key[\"']?\s*[:=]\s*[\"']?)[^\s\"',;}]+",
+            r"(X-WhisprPersonal-Server-Key[\"']?\s*[:=]\s*[\"']?)[^\s\"',;}]+",
             r"\1[REDACTED]",
             value,
             flags=re.I,
