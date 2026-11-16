@@ -1,3 +1,4 @@
+import { fontFor, lineHeightFor } from '@/theme/fonts';
 import { useState } from 'react';
 import { Text, TextInput, View, type TextInputProps } from 'react-native';
 import { useTheme, typography, spacing } from '@/theme';
@@ -25,7 +26,7 @@ export function TextField({ label, ...props }: TextInputProps & {
         padding: spacing.sm,
         color: t.text,
         backgroundColor: t.surface,
-        ...typography.body
+        ...typography.body, fontFamily: fontFor(props.value ?? ''), lineHeight: lineHeightFor(props.value ?? '', 16)
       }, props.multiline && { minHeight: 112, textAlignVertical: 'top' }]}
     />
   </View>;

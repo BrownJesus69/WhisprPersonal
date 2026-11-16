@@ -7,14 +7,14 @@ import { unavailableReason } from '@/lib/ai/messages';
 import { useSettingsStore, type Settings } from '@/state/settingsStore';
 
 /** Submit once after finalization, using the event's actual privacy rather than a new-event default. */
-export async function requestDefaultCleanup(owner: string, id: string, level: Settings['cleanupLevel']): Promise<'original' | 'available' | 'not_configured'> {
+export async function requestDefaultCleanup(owner: string, id: string, level: Settings['cleanupLevel'], retry = false): Promise<'original' | 'available' | 'not_configured'> {
   if (level === 'none') return 'original';
   const repo = await repositories(), session = await repo.session(id);
   if (!session || session.owner_uid !== owner || session.status !== 'finalized') return 'original';
-  if ((await repo.transcript(id)).some(row => !!row.polished_text)) return 'available';
+  if (!retry && (await repo.transcript(id)).some(row => !!row.polished_text)) return 'available';
   // Never automatically resubmit an accepted or failed paid job.
-  const existing = (await repo.aiJobs(owner, session.event_id)).find(job => job.kind === 'cleanup' && job.session_ids.includes(id));
-  if (existing) {
+  const existing = (await repo.aiJobs(owner, session.event_id)).sort((a,b) => b.created_at.localeCompare(a.created_at)).find(job => job.kind === 'cleanup' && job.session_ids.includes(id));
+  if (existing && !(retry && ['failed', 'interrupted'].includes(existing.status))) {
     if (['failed', 'interrupted'].includes(existing.status)) throw new Error('cleanup_failed');
     return 'available';
   }

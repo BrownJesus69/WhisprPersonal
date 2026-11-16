@@ -1,3 +1,4 @@
+import { t as tr } from '@/i18n';
 import { View, Text } from 'react-native';
 import { useTheme, typography, spacing } from '@/theme';
 
@@ -12,7 +13,7 @@ export function KeyValueRow({ label, value, selectable = false }: {
       {label}
     </Text>
     <Text selectable={selectable} style={{ ...typography.body, color: t.text }}>
-      {value === null || value === undefined ? 'Unknown' : String(value)}
+      {value === null || value === undefined ? tr('unknown') : String(value)}
     </Text>
   </View>;
 }

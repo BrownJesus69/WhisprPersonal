@@ -125,6 +125,7 @@ export default function RootLayout() {
             <Stack.Protected guard={signedIn}>
               <Stack.Screen name="(app)" options={{ headerShown: false }} />
               <Stack.Screen name="setup/index" options={{ title: t('setup') }} />
+              <Stack.Screen name="captions" options={{ title: t('captions'), headerShown: false }} />
               <Stack.Screen name="keyboard-setup" options={{ title: t('keyboardSetup') }} />
               <Stack.Screen name="personal-words" options={{ title: t('personalWords') }} />
               <Stack.Screen name="history/[sessionId]" options={{ title: t('transcript') }} />

@@ -134,3 +134,37 @@ as the go/no-go record. Automated results and hardware verification must be repo
 
 Phase 10a translator model verification remains unchanged. Phase 10b automated UI tests do not
 replace a physical Android rehearsal or claim new real-model translation accuracy results.
+# UX-4 physical Android device checks
+
+Automated checks cover recovery notices, bounded waits, script font/line-height selection,
+caption following and reconnect replay, keep-awake mounting, labels, source string guards,
+sheet Back and setup Back. They cannot establish native rendering or system behavior.
+
+- Permissions: deny microphone once and permanently; Open settings must work. Grant it and
+  retry. Occupy the microphone using another app; verify the contention notice and recovery.
+- Lifecycle: record on Speak, open captions, press Back, change tabs, background/foreground,
+  lock/unlock, interrupt with a call and kill/relaunch the process. Verify notification,
+  recording continuity, saved chunks, interrupted-session recovery and restored draft edits.
+- Network: disconnect/reconnect the computer during recording and processing; expire sign-in,
+  deny the account, restart the model, delay requests past 30 seconds, and processing past
+  60 seconds. Check actionable notices, retained audio and absence of endless loading.
+- Result failures: record silence, fail one recognition chunk, retry upload, fail cleanup,
+  reject sharing and retry, and simulate storage failure while editing. Check safety copy
+  against what is actually saved and confirm original text never changes on cleanup failure.
+- Captions: replay final events after reconnect and confirm no duplicate rows. Scroll upward,
+  add more text, Jump to latest, resize to both limits, reopen and confirm persisted size.
+  Check screen wake behavior while recording, paused, stopped and after navigating away.
+- TalkBack: both themes; verify labels, selected/disabled/expanded states, focus confined to
+  open sheets, header/status/language/text/microphone/actions reading order, Back closure,
+  recording/stopping/ready/copy/error announcements, and no timer/provisional chatter.
+- Large text: set Android font scale to 200% in both themes. Check Speak's dock remains
+  reachable as text shrinks and scrolls; actions wrap without truncation. Check History rows,
+  detail, Settings including Advanced, language sheets, Connect, setup and keyboard setup.
+- Scripts: read and edit realistic long Kannada, Tamil, Hindi and English/Indic mixed lines
+  in Speak, History search/detail, event transcripts, translations, notes and briefs. Check
+  conjuncts, vowel marks, punctuation, fallback glyphs, first-script font choice, line spacing,
+  selection and keyboard insertion. Compare light and dark themes on the actual phone.
+- Keyboard: enable/select using system settings, return and verify actual-state checkmarks;
+  test permission denial, contention, offline retry, review mode, changed editor, Insert here,
+  Copy, leading spaces, duplicate insertion protection, Undo timeout/mismatch, password fields,
+  Backspace repeat, Enter actions and switching to another keyboard. Check TalkBack targets.

@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import type { AIStatus } from './types';
 
 export const UNAVAILABLE = 'Cloud AI unavailable; raw transcript preserved.';
@@ -17,8 +18,8 @@ export const AI_MESSAGES: Record<string, string> = {
   renew_required: 'Sign in to the recording account and reconnect.',
 };
 export function aiMessage(code: string) { return AI_MESSAGES[code] ?? 'Could not complete this AI request. Please try again.'; }
-export const providerName = (name: string | null) => ({ groq: 'Groq', sambanova: 'SambaNova', local_llm: 'Local model', none: 'No provider' })[name ?? 'none'] ?? 'No provider';
-export const providerStatus = (status: string) => ({ not_configured: 'Not configured', configured_unchecked: 'Not checked', ready: 'Ready', degraded: 'Degraded', circuit_open: 'Paused after errors', auth_failed: 'Key rejected' })[status] ?? 'Unknown';
+export const providerName = (name: string | null) => ({ groq: t('healthGroq'), sambanova: t('healthSambaNova'), local_llm: t('healthLocalModel'), none: t('providerNone') })[name ?? 'none'] ?? t('providerNone');
+export const providerStatus = (status: string) => ({ not_configured: t('providerNotConfigured'), configured_unchecked: t('providerNotChecked'), ready: t('providerReady'), degraded: t('providerDegraded'), circuit_open: t('providerPaused'), auth_failed: t('providerRejected') })[status] ?? t('unknown');
 export function unavailableReason(url: string, status?: AIStatus, privacy?: string): string | null {
   if (!url) return 'Connect a laptop in Settings.';
   if (!status) return 'Provider status unavailable. Refresh to try again.';

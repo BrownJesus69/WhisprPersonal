@@ -1,4 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { AccessibilityInfo } from 'react-native';
+import { t } from '@/i18n';
 import { useSpeak, draftKey } from '@/features/speak/useSpeak';
 import { MemoryRepositories } from '@/lib/db/memoryRepositories';
 import { repositories, transcriptRow } from '@/lib/db/repositories';
@@ -38,18 +40,34 @@ beforeEach(() => {
 });
 afterEach(() => { jest.useRealTimers(); });
 test('start, listening, immediate stopping, processing and finalized text in sequence order', async () => {
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
   const hook = await renderHook(useSpeak);
   expect(hook.result.current.state).toBe('idle');
   await act(async () => { await hook.result.current.start(); });
   expect(hook.result.current.state).toBe('listening');
+  expect(announce).toHaveBeenCalledWith(t('recordingAnnouncement'));
+  announce.mockClear();
+  await act(async () => { useRecordingStore.setState({ elapsedMs: 5000, dbfs: -20 }); });
+  expect(announce).not.toHaveBeenCalled();
   expect(createEvent).toHaveBeenCalledTimes(1);
   expect(useRecordingStore.getState().start).toHaveBeenCalledWith(expect.objectContaining({ language_mode: 'auto' }), 'Speak', true);
   await act(async () => { await hook.result.current.stop(); });
   expect(hook.result.current.state).toBe('processing');
+  expect(announce).toHaveBeenCalledWith(t('processingAnnouncement'));
   await repo.upsertTranscript(transcriptRow(id, finalData({ sequence: 1, raw_text: 'second' })));
   await repo.upsertTranscript(transcriptRow(id, finalData({ sequence: 0, raw_text: 'first' })));
   await repo.updateSession(id, { status: 'finalized' }); await tick();
   expect(hook.result.current.state).toBe('complete'); expect(hook.result.current.draft).toBe('first second');
+  expect(announce).toHaveBeenCalledWith(t('readyAnnouncement'));
+  announce.mockRestore();
+});
+
+test('leaving Speak while recording does not call Stop', async () => {
+  const hook = await renderHook(useSpeak);
+  await act(async () => { await hook.result.current.start(); });
+  await hook.unmount();
+  expect(useRecordingStore.getState().stop).not.toHaveBeenCalled();
+  expect(useRecordingStore.getState().phase).toBe('recording');
 });
 
 test('next Speak start removes finalized Speak recordings when retention is off', async () => {

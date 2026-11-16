@@ -93,7 +93,7 @@ export class UploadService {
     this.paused = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => this.notify(true), PAUSED_PROBE_MS);
-    this.d.connection(error instanceof ServerError && ['renew_required','auth_token_expired','auth_unavailable'].includes(error.code) ? 'renew_required' : 'error');
+    this.d.connection(error instanceof ServerError && ['renew_required','auth_token_expired','auth_unavailable','account_not_allowed'].includes(error.code) ? 'renew_required' : 'error');
     return true;
   }
   private async upload(s: LocalSession, c: LocalChunk) {

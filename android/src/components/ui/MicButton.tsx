@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Animated, Pressable, Text, View } from 'react-native';
 import { useTheme, typography } from '@/theme';
 import { t } from '@/i18n';
-export function MicButton({ state, onPress }: { state: 'ready' | 'listening' | 'processing' | 'complete'; onPress: () => void }) {
+export function MicButton({ state, onPress, elapsed }: { state: 'ready' | 'listening' | 'processing' | 'complete'; onPress: () => void; elapsed?: string }) {
   const c = useTheme();
   const [scale] = useState(() => new Animated.Value(1));
-  const [reduced, setReduced] = useState(false);
+  const [reduced, setReduced] = useState(true);
   useEffect(() => {
     let active = true;
     void AccessibilityInfo.isReduceMotionEnabled().then(value => { if (active) setReduced(value); }).catch(() => {});
@@ -18,7 +18,7 @@ export function MicButton({ state, onPress }: { state: 'ready' | 'listening' | '
   const feedback = (value: number) => Animated.timing(scale, { toValue: value, duration: reduced ? 0 : 150, useNativeDriver: true }).start();
   return <View style={{ alignItems: 'center', gap: 8 }}>
     <Animated.View style={{ transform: [{ scale }] }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={onPress}
+      <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={state === 'listening' ? elapsed : undefined} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={onPress}
         onPressIn={() => feedback(0.95)} onPressOut={() => feedback(1)}
         style={{ width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: state === 'listening' ? c.record : c.primary }}>
         {busy ? <ActivityIndicator color={foreground} /> : state === 'listening' ? <View style={{ width: 24, height: 24, borderRadius: 3, backgroundColor: foreground }} /> :

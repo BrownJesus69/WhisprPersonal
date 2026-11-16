@@ -348,3 +348,29 @@ Phase 9 workflows, EAS preview builds and sideloading are documented in
 [setup](../docs/setup.md); run [the test plan](../docs/test-plan.md) and
 [event rehearsal](../docs/event-runbook.md) before event use. expo-sharing is used only
 for outbound shares; no share-target config plugin is registered.
+# UX-4 recovery and live captions
+
+Speak keeps its microphone dock outside the scrolling text area. Inline notices explain
+permission denial, microphone contention, silence, recognition failure, computer sign-in,
+model startup, slow processing, cleanup, sharing and draft-save failures. Recognition retry
+uses the existing upload queue; cleanup retries require an explicit tap. Original text stays
+available if cleanup fails. Sharing retries share the same text again.
+
+Speak's More sheet offers Live captions when connected, health reports a ready model, and
+the existing session stream is live. Health has no separate streaming capability flag; the
+entry requires an observed live stream. Captions reuse `useSpeak` and the Speak event, keep
+final segments through reconnect replay, and distinguish provisional text with muted italics.
+Scroll up to pause following; Jump to latest resumes it. Caption size is saved (20–40 sp,
+28 by default). This screen keeps the phone awake only during active recording. Navigating
+away from Speak or captions does not stop the recorder.
+
+Keyboard setup remains in Settings → Keyboard → Use WhisprPersonal in other apps. Enable
+the keyboard, choose it using Android's picker, then try the sample field. System state is
+rechecked on returning to the app. Use Not now to leave setup. Microphone permission must
+be granted in the app before using voice input in another app.
+
+TalkBack announcements cover recording transitions, text ready, copy and notice titles.
+Timers and provisional updates are not live regions. Sheets honor reduced motion and close
+on Android Back; setup Back returns to the previous step. Kannada, Tamil and Devanagari
+content uses bundled Noto fonts, with the first Indic script selecting the family for mixed
+lines and at least 1.5× line height. UI language remains English.

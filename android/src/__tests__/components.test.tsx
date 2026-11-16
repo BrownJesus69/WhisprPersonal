@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -57,7 +58,7 @@ test('Connect explains unreachable laptop', async () => {
   mockFetch().mockRejectedValue(new Error('offline'));
   const view = await connect();
   await fireEvent.press(view.getByText('Connect'));
-  await waitFor(() => expect(view.getByText("Can't reach the laptop. Same Wi-Fi/Tailscale? Server running?")).toBeTruthy());
+  await waitFor(() => expect(view.getByText(t('connectionFailed'))).toBeTruthy());
 });
 
 test('one tap verifies sign-in, obtains a pass with a Firebase token, and saves', async () => {

@@ -1,3 +1,4 @@
+import { fontFor, lineHeightFor } from '@/theme/fonts';
 import { useRef, useState } from 'react';
 import { Text, TextInput } from 'react-native';
 import type { BriefDraft } from '@/lib/ai/types';
@@ -25,7 +26,7 @@ export function BriefEditor({ draft, persist, save, discard }: {
     {!!draft.incomplete && <Banner message="Generated from an incomplete transcript. Some parts may be missing." />}
     {draft.warning === 'unstructured_output' && <Banner message="The output could not be organized into sections. Review the text carefully." />}
     <TextInput accessibilityLabel="Brief draft" multiline maxLength={100000} value={text} editable={!busy}
-      style={{ ...typography.body, color: t.text, backgroundColor: t.surface, borderColor: t.border, borderWidth: 1, borderRadius: spacing.sm, padding: spacing.sm, minHeight: 240, textAlignVertical: 'top' }}
+      style={{ ...typography.body, fontFamily: fontFor(text), lineHeight: lineHeightFor(text, 16), color: t.text, backgroundColor: t.surface, borderColor: t.border, borderWidth: 1, borderRadius: spacing.sm, padding: spacing.sm, minHeight: 240, textAlignVertical: 'top' }}
       onChangeText={value => {
         setText(value);
         lane.current = lane.current.catch(() => {}).then(() => persist(current(value)));

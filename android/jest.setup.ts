@@ -127,7 +127,7 @@ jest.mock('expo-file-system', () => {
   return { File, Directory, Paths: { cache: { uri: 'file:///cache' }, totalDiskSpace: 20 * 1024 ** 3, document: { uri: 'file:///documents' }, availableDiskSpace: 10 * 1024 ** 3 } };
 });
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { version: '0.5.0', sdkVersion: '58', extra: { features: { googleSignIn: false }, consentVersion: '2026-11-15' } } } }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() }, useSegments: () => [], useLocalSearchParams: jest.fn(() => ({})) }));
+jest.mock('expo-router', () => ({ router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() }, useSegments: () => [], useFocusEffect: jest.fn((effect: () => void | (() => void)) => { jest.requireActual('react').useEffect(effect, [effect]); }), useLocalSearchParams: jest.fn(() => ({})) }));
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 // All network access is denied unless a test supplies a controlled fetch implementation.
 beforeEach(() => {

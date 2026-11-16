@@ -276,3 +276,26 @@ Decision: [ ] Ready  [ ] Defer; unresolved issue: ______________________________
 
 Future integrations in Settings remain disabled. They need separate owner setup and consent;
 their unconfigured state does not interfere with the event. See [integrations](integrations.md).
+# Speak, History and live captions recovery
+
+- Start on Speak, select a language and tap Start speaking. Stop keeps the recording and
+  turns speech into text on the computer. Leaving the screen keeps recording active.
+- If microphone access is off, Open settings grants it; nothing was recorded. If another app
+  holds the microphone, release it there and Try again. Verify this on the event phone.
+- A disconnected computer leaves recorded audio waiting on the phone. Connect computer
+  also handles expired sign-in or an account restriction. Check again refreshes model health.
+- Processing with no progress for 60 seconds displays a slow notice. Network waits have
+  bounded failure handling; uploads use a 30-second timeout and retain the existing retry queue.
+- Silence gives a Try again action while retaining that recording in History. Recognition
+  failures offer an upload retry. Cleanup failure leaves original text unchanged and can be
+  retried explicitly. A share failure retries the share action; copy remains available.
+- History contains saved recordings and editable text, including drafts. Detail uses the same
+  recognition, computer, cleanup and share recovery notices. If phone audio was deleted,
+  recovery does not claim that the audio remains on the phone.
+- While connected with a ready model and a live session stream, Speak → More → Live captions
+  opens the secondary caption screen. Font size is adjustable from 20 to 40 sp. Scrolling up
+  pauses following; Jump to latest resumes it. Reconnecting preserves final segments without
+  duplicate rows. Keep-awake applies only while this screen is actively recording.
+- Before the event, open Settings → Keyboard setup, enable and select WhisprPersonal, then
+  test the sample field. In other apps check review-before-insert, changed-field handling,
+  Copy/Insert here, Undo, password restrictions and switching keyboards.

@@ -163,3 +163,13 @@ test('a recorder that fails to start says nothing was recorded', async () => {
   expect(t.store.getState()).toMatchObject({ phase: 'error', message: 'Recording could not start, so nothing was recorded. Try again.' });
   expect((await t.repo.session(t.s.id))?.last_error).toBe('chunk_save_failed: microphone busy');
 });
+
+test('microphone start failure releases the native attempt and allows retry', async () => {
+  const t = await setup();
+  t.recorder.start.mockRejectedValueOnce(new Error('microphone busy'));
+  await t.store.getState().start(t.s, 'Event', true);
+  expect((await t.repo.session(t.s.id))?.consent_at).toBeNull();
+  await t.store.getState().start(t.s, 'Event', true);
+  expect(t.recorder.start).toHaveBeenCalledTimes(2);
+  expect(t.store.getState().phase).toBe('recording');
+});

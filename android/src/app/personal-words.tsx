@@ -1,3 +1,5 @@
+import { fontFor, lineHeightFor } from '@/theme/fonts';
+import { withDeadline } from '@/lib/deadline';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -25,8 +27,8 @@ function PersonalWordsContent({ uid }: { uid?: string }) {
   const c = useTheme();
   const api = () => new VocabularyAPI(uid ? authedClient(uid) : null);
   const query = useQuery({ queryKey: ['personal-words', uid], enabled: !!uid && connected, retry: false, queryFn: async () => {
-    const event = await ensureSpeakEvent(uid!);
-    return { eventId: event.id, ...await api().load(event.id) };
+    const event = await withDeadline(ensureSpeakEvent(uid!));
+    return { eventId: event.id, ...await withDeadline(api().load(event.id)) };
   } });
   const words = edited ?? query.data?.terms ?? [];
   const update = (values: string[]) => { setEdited(validateTerms(values)); setSaved(false); setError(null); };
@@ -38,15 +40,15 @@ function PersonalWordsContent({ uid }: { uid?: string }) {
       {query.error && <InlineNotice title={t('wordsLoadFailed')} safety={t('wordsSafe')} action={t('retry')} onPress={() => { void query.refetch(); }} />}
       <TextField label={t('addWord')} value={word} editable={!!query.data && !busy} onChangeText={setWord} />
       <Button secondary label={t('add')} disabled={!word.trim() || !query.data || busy} onPress={() => { try { update([...words, word]); setWord(''); } catch { setError('validation'); } }} />
-      {words.map(value => <View key={value} style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderColor: c.border }}>
-        <Text style={{ ...typography.body, flex: 1, color: c.text }}>{value}</Text><Button secondary label={t('remove')} disabled={busy} onPress={() => update(words.filter(w => w !== value))} />
+      {words.map(value => <View key={value} style={{ minHeight: 48, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderColor: c.border }}>
+        <Text style={{ ...typography.body, fontFamily: fontFor(value), lineHeight: lineHeightFor(value, 16), flex: 1, color: c.text }}>{value}</Text><Button secondary label={t('remove')} disabled={busy} onPress={() => update(words.filter(w => w !== value))} />
       </View>)}
       {error && <InlineNotice title={t(error === 'validation' ? 'wordsLimit' : 'wordsFailed')} safety={t('wordsSafe')} action={t('retry')} onPress={() => setError(null)} />}
       {saved && <Text accessibilityLiveRegion="polite" style={{ ...typography.body, color: c.muted }}>{t('wordsSaved')}</Text>}
       <Button label={t('save')} disabled={!query.data} loading={busy} onPress={() => {
         if (!query.data) return;
         setBusy(true); setError(null); setSaved(false);
-        void api().save(query.data.eventId, validateTerms(words)).then(() => setSaved(true)).catch(() => setError('save')).finally(() => setBusy(false));
+        void withDeadline(api().save(query.data.eventId, validateTerms(words))).then(() => setSaved(true)).catch(() => setError('save')).finally(() => setBusy(false));
       }} />
     </>}
   </Screen>;

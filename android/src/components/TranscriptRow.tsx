@@ -1,3 +1,4 @@
+import { fontFor, lineHeightFor } from '@/theme/fonts';
 import { memo, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, Text } from 'react-native';
 import { spacing, typography, useTheme } from '@/theme';
@@ -24,14 +25,14 @@ export const TranscriptRow = memo(function TranscriptRow({ row, onAddNote }: { r
     return () => clearTimeout(timer);
   }, [row.revision, reduce]);
   const canAdd = !!onAddNote && !row.partial && !row.failed;
-  return <Pressable accessible={canAdd} accessibilityLabel={canAdd ? `Transcript: ${row.text}` : undefined}
+  return <Pressable accessible={canAdd} accessibilityLabel={canAdd ? `Transcript: ${row.text}` : row.partial ? `Partial transcript: ${row.text}` : row.failed ? 'Could not transcribe this part' : row.text || 'Transcript'}
     accessibilityActions={canAdd ? [{ name: 'addNote', label: 'Add to notes' }] : undefined}
     onAccessibilityAction={e => { if (canAdd && e.nativeEvent.actionName === 'addNote') onAddNote?.(row); }}
     onLongPress={canAdd ? () => onAddNote?.(row) : undefined} style={{ minHeight: 48, paddingVertical: spacing.sm, gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: t.border, backgroundColor: updated && !reduce ? t.surface : 'transparent' }}>
     {row.divider && <Text accessibilityRole="header" style={{ ...typography.label, color: t.primary }}>— {languageName(row.divider)} —</Text>}
     <Text style={{ ...typography.label, color: t.muted, fontVariant: ['tabular-nums'] }}>{timestamp(row.startMs)}{updated && !reduce ? ' · updated' : ''}</Text>
     {row.notCleaned && <Text style={{ ...typography.label, color: t.muted }}>Not cleaned</Text>}
-    <Text selectable accessibilityLabel={row.partial ? `Partial transcript: ${row.text}` : undefined} style={{ ...typography.body, color: row.failed ? t.danger : row.partial ? t.muted : t.text, fontStyle: row.partial ? 'italic' : 'normal' }}>
+    <Text selectable accessibilityLabel={row.partial ? `Partial transcript: ${row.text}` : undefined} style={{ ...typography.body, fontFamily: fontFor(row.text), lineHeight: lineHeightFor(row.text, 16), color: row.failed ? t.danger : row.partial ? t.muted : t.text, fontStyle: row.partial ? 'italic' : 'normal' }}>
       {row.failed ? `Could not transcribe this part (${row.failed}). Audio is kept on the phone.` : `${row.text}${row.partial ? ' …' : ''}`}
     </Text>
   </Pressable>;

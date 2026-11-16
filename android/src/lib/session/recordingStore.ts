@@ -136,7 +136,14 @@ export function createRecordingStore(d: Dependencies) {
           // An audio-focus interruption may have happened while native Start resolved.
           if (!['paused','error'].includes(get().phase)) set({ phase: 'recording', busy: false });
           d.event(session.event_id, 'active');
-        } catch (error) { await failure(error, session); }
+        } catch (error) {
+          if (!masterStarted) {
+            if (nativeActive) { try { await d.recorder().stop(); } catch { /* Native start failed. */ } }
+            nativeActive = false;
+            try { await (await d.repo()).updateSession(session.id, { status: 'paused', consent_at: null }); } catch { /* failure() reports persistence failure. */ }
+          }
+          await failure(error, session);
+        }
       },
       async pause() {
         if (get().phase !== 'recording' || get().busy) return;

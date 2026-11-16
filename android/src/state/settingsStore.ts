@@ -4,6 +4,7 @@ import { kv } from '@/lib/storage/kv';
 import type { LanguageMode, PrivacyMode } from '@/types/models';
 
 export interface Settings {
+  captionSize: number;
   onboarding: 'pending' | 'done';
   keepTranscripts: boolean;
   reviewBeforeInsert: boolean;
@@ -25,7 +26,7 @@ export interface Settings {
 }
 
 export const defaults: Settings = {
-  onboarding: 'pending', keepTranscripts: true,
+  captionSize: 28, onboarding: 'pending', keepTranscripts: true,
   reviewBeforeInsert: false, haptics: true, keyboardPromptDismissed: false,
   appearance: 'system', recentLanguages: [], speakEventIds: {}, speakEventId: '', speakEventOwner: '',
   serverUrl: '',
@@ -41,6 +42,7 @@ export const defaults: Settings = {
 export function normalizeSettings(value: Partial<Settings>): Settings {
   const s = { ...defaults, ...value };
   return {
+    captionSize: Number.isFinite(s.captionSize) ? Math.max(20, Math.min(40, s.captionSize)) : 28,
     onboarding: value.onboarding === 'done' || value.onboarding !== 'pending' && typeof value.serverUrl === 'string' && !!value.serverUrl.trim() ? 'done' : 'pending',
     keepTranscripts: s.keepTranscripts !== false,
     reviewBeforeInsert: s.reviewBeforeInsert === true,

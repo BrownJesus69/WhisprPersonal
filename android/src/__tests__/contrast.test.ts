@@ -1,7 +1,7 @@
 import { light, dark } from '@/theme/colors';
 import { contrastRatio } from '@/theme/contrast';
 test.each([light, dark])('theme meets AA for reading and controls', theme => {
-  for (const [a,b] of [['text','background'],['text','surface'],['muted','background'],['onPrimary','primary'],['onRecord','record']] as const) {
+  for (const [a,b] of [['text','background'],['text','surface'],['muted','background'],['muted','surface'],['onPrimary','primary'],['onRecord','record']] as const) {
     expect(contrastRatio(theme[a], theme[b])).toBeGreaterThanOrEqual(4.5);
   }
 });

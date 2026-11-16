@@ -45,3 +45,12 @@ test('accepted cleanup jobs are never automatically submitted twice', async () =
   await repo.putAIJob({ job_id: 'cleanup', kind: 'cleanup', status: 'queued', event_id: 'event-1', owner_uid: 'owner', session_ids: [session().id], error_code: null, created_at: '', updated_at: '' });
   expect(await requestDefaultCleanup('owner', session().id, 'polished')).toBe('available'); expect(submit).not.toHaveBeenCalled();
 });
+
+test('failed cleanup is resubmitted only on an explicit retry', async () => {
+  await repo.putAIJob({ job_id: 'cleanup', kind: 'cleanup', status: 'failed', event_id: 'event-1', owner_uid: 'owner', session_ids: [session().id], error_code: 'provider_failed', created_at: '', updated_at: '' });
+  await expect(requestDefaultCleanup('owner', session().id, 'polished')).rejects.toThrow('cleanup_failed');
+  expect(submit).not.toHaveBeenCalled();
+  expect(await requestDefaultCleanup('owner', session().id, 'polished', true)).toBe('available');
+  expect(submit).toHaveBeenCalledTimes(1);
+  expect(await repo.transcript(session().id)).toEqual([]);
+});

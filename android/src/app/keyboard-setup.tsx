@@ -1,3 +1,4 @@
+import { fontFor, lineHeightFor } from '@/theme/fonts';
 import { useEffect, useState } from 'react';
 import { AppState, Text, TextInput } from 'react-native';
 import { router } from 'expo-router';
@@ -37,7 +38,7 @@ export default function KeyboardSetup() {
       <Button label={t('keyboardChoose')} onPress={() => action(() => keyboard.showPicker())} />
     </SettingsGroup>
     <SettingsGroup title={t('keyboardTry')}>
-      <TextInput accessibilityLabel={t('keyboardTest')} placeholder={t('keyboardTest')} placeholderTextColor={c.muted} value={sample} onChangeText={setSample} multiline style={{ ...typography.body, color: c.text, backgroundColor: c.surface, minHeight: 80, padding: 12, borderWidth: 1, borderColor: c.border, borderRadius: 12 }} />
+      <TextInput accessibilityLabel={t('keyboardTest')} placeholder={t('keyboardTest')} placeholderTextColor={c.muted} value={sample} onChangeText={setSample} multiline style={{ ...typography.body, fontFamily: fontFor(sample), lineHeight: lineHeightFor(sample, 16), color: c.text, backgroundColor: c.surface, minHeight: 80, padding: 12, borderWidth: 1, borderColor: c.border, borderRadius: 12 }} />
       {!!sample.trim() && system.enabled && system.selected && <Text style={{ ...typography.body, color: c.text }}>✓ {t('keyboardTestDone')}</Text>}
     </SettingsGroup>
     <Button secondary label={t('notNow')} onPress={() => router.back()} />

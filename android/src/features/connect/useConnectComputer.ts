@@ -1,3 +1,4 @@
+import { withDeadline } from '@/lib/deadline';
 import { syncKeyboard } from '@/features/keyboard/syncKeyboard';
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '@/state/settingsStore';
@@ -45,7 +46,7 @@ export function useConnectComputer(onConnected?: (ready: boolean) => void) {
       setRetryAt(Date.now() + error.retryAfterS * 1000);
     setMessage(error instanceof ServerError && error.status > 0
       ? serverMessage(error.code, error.status, error.retryAfterS)
-      : error instanceof Error ? error.message : t('connectionFailed'));
+      : error instanceof Error && error.message === t('enterServerKey') ? t('enterServerKey') : t('connectionFailed'));
   }
   async function connect() {
     if (busy || retryAt > Date.now())
@@ -56,24 +57,24 @@ export function useConnectComputer(onConnected?: (ready: boolean) => void) {
     connection.set({ status: 'testing', check: null, passExpiry: null });
     try {
       const url = parseServerUrl(address).url;
-      const result = await health.mutateAsync(url);
+      const result = await withDeadline(health.mutateAsync(url));
       setChecks(['passed', 'checking', 'waiting']);
       connection.set({ health: result, status: 'verifying' });
       if (!key.trim())
         throw new Error(t('enterServerKey'));
       await credentials.setServerKey(key.trim());
-      connection.set({ check: await check.mutateAsync(url) });
+      connection.set({ check: await withDeadline(check.mutateAsync(url)) });
       setChecks(['passed', 'passed', result.model.status === 'ready' ? 'passed' : 'failed']);
       if (result.auth.grants.enabled)
-        await createTokenManager(url).ensurePass();
+        await withDeadline(createTokenManager(url).ensurePass());
       settings.set({ serverUrl: url });
-      await syncKeyboard().catch(() => setMessage(t('keyboardSyncFailed')));
+      await withDeadline(syncKeyboard()).catch(() => setMessage(t('keyboardSyncFailed')));
       connection.set({ status: 'connected' });
       onConnected?.(result.model.status === 'ready');
     }
     catch (e) {
       setChecks(current => current.map(step => step === 'checking' ? 'failed' : step));
-      connection.set({ status: e instanceof ServerError && e.code === 'auth_token_expired' ? 'renew_required' : 'error' });
+      connection.set({ status: e instanceof ServerError && ['auth_token_expired', 'account_not_allowed'].includes(e.code) ? 'renew_required' : 'error' });
       showError(e);
     }
     finally {

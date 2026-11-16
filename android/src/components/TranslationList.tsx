@@ -1,3 +1,4 @@
+import { fontFor, lineHeightFor } from '@/theme/fonts';
 import { FlatList, Text, View } from 'react-native';
 import type { LocalSession, TranscriptRow } from '@/lib/db/repositories';
 import type { Target, Translation } from '@/lib/translation/types';
@@ -16,10 +17,10 @@ export function TranslationList({ session, originals, rows, target, search = '' 
         <Text style={{ ...typography.label, color: t.muted }}>{translationLabel(item.translated)}</Text>
         {item.translated.source_lang === 'und' && item.translated.engine === 'groq-audio-translation' && <Text style={{ ...typography.label, color: t.muted }}>{audioLabel}</Text>}
       </> : <Text style={{ ...typography.label, color: t.muted }}>Not translated</Text>}
-      <Text selectable style={{ ...typography.body, color: t.text }}>{item.text}</Text>
+      <Text selectable style={{ ...typography.body, color: t.text, fontFamily: fontFor(item.text), lineHeight: lineHeightFor(item.text, 16) }}>{item.text}</Text>
       {item.translated?.polished_text != null && <View style={{ padding: spacing.sm, backgroundColor: t.surface, gap: spacing.xs }}>
         <Text style={{ ...typography.label, color: t.muted }}>{polishLabel(item.translated)}</Text>
-        <Text selectable style={{ ...typography.body, color: t.text }}>{item.translated.polished_text}</Text>
+        <Text selectable style={{ ...typography.body, color: t.text, fontFamily: fontFor(item.translated.polished_text), lineHeight: lineHeightFor(item.translated.polished_text, 16) }}>{item.translated.polished_text}</Text>
       </View>}
     </View>} />;
 }

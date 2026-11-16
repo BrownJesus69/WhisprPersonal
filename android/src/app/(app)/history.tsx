@@ -5,7 +5,7 @@ import { getEvent } from '@/lib/firebase/events';
 import { kv } from '@/lib/storage/kv';
 import { draftKey } from '@/features/speak/drafts';
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Pressable, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
@@ -16,7 +16,7 @@ import { Button } from '@/components/Button';
 import { InlineNotice } from '@/components/ui/InlineNotice';
 import { historyGroup, duration } from '@/features/speak/history';
 import { useTheme, typography } from '@/theme';
-import { fontFor } from '@/theme/fonts';
+import { fontFor, lineHeightFor } from '@/theme/fonts';
 import { t } from '@/i18n';
 export default function History() {
   const uid = useAuthStore(s => s.user?.uid), c = useTheme();
@@ -44,13 +44,13 @@ export default function History() {
       return matching.length > 0 && <View key={group} style={{ gap: 12 }}>
         <Text accessibilityRole="header" style={{ ...typography.heading, color: c.text }}>{t(group)}</Text>
         {matching.map(({ session, text }) => <View key={session.id} style={{ padding: 16, borderRadius: 16, backgroundColor: c.surface }}>
-          <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/history/[sessionId]', params: { sessionId: session.id } })} style={{ minHeight: 48, gap: 8 }}>
-            <Text numberOfLines={2} style={{ ...typography.body, lineHeight: 26, color: c.text, fontFamily: fontFor(text) }}>{text || t(session.finalize_status === 'interrupted' || session.status === 'interrupted' ? 'interruptedPreview' : ['stopped','finalizing'].includes(session.status) ? 'processing' : 'noText')}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={text || t('noText')} onPress={() => router.push({ pathname: '/history/[sessionId]', params: { sessionId: session.id } })} style={{ minHeight: 48, gap: 8 }}>
+            <Text numberOfLines={2} style={{ ...typography.body, color: c.text, fontFamily: fontFor(text), lineHeight: lineHeightFor(text, 16) }}>{text || t(session.finalize_status === 'interrupted' || session.status === 'interrupted' ? 'interruptedPreview' : ['stopped','finalizing'].includes(session.status) ? 'processing' : 'noText')}</Text>
             {session.event_id !== speakId && <Text style={{ ...typography.caption, color: c.muted }}>{t('eventTitle', { title: events.find(e => e.id === session.event_id)?.title || titles.data?.[session.event_id] || t('unknownEvent') })}</Text>}
             <Text style={{ ...typography.caption, lineHeight: 20, fontFamily: fontFor(t(session.language_mode)), color: c.muted }}>{t('metadata', { time: new Date(session.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), language: t(session.language_mode), duration: duration(session) })}</Text>
           </Pressable>
-          {!!text && <Button secondary label={t('copy')} onPress={() => { void Clipboard.setStringAsync(text).then(() => setCopied(session.id)).catch(() => setCopyError(true)); }} />}
-          {copied === session.id && <Text accessibilityLiveRegion="polite" style={{ color: c.muted }}>{t('copied')}</Text>}
+          {!!text && <Button secondary label={t('copy')} onPress={() => { void Clipboard.setStringAsync(text).then(() => { setCopied(session.id); AccessibilityInfo.announceForAccessibility(t('copied')); }).catch(() => setCopyError(true)); }} />}
+          {copied === session.id && <Text style={{ color: c.muted }}>{t('copied')}</Text>}
         </View>)}
       </View>;
     })}

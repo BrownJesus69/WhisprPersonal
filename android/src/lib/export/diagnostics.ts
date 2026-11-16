@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { DIRECTIONS, ENGINE_STATES } from '../translation/types';
 import type { Repositories } from '../db/repositories';
 export type DiagnosticRow = { label: string; value: string };
@@ -50,13 +51,13 @@ export function diagnosticsText(phone: DiagnosticRow[], laptop: DiagnosticRow[])
 
 export function translationDiagnostics(data: unknown): DiagnosticRow[] {
   const root = object(data), indic = object(root.indictrans2), libre = object(root.libretranslate);
-  const rows = DIRECTIONS.map(d => ({ label: `IndicTrans2 ${d}`, value: ENGINE_STATES.includes(indic[d] as never) ? String(indic[d]) : 'unavailable' }));
+  const rows = DIRECTIONS.map(d => ({ label: t('diagnosticIndicTrans', { direction: d }), value: ENGINE_STATES.includes(indic[d] as never) ? String(indic[d]) : 'unavailable' }));
   for (const source of ['kn','ta','hi','en']) for (const target of ['kn','ta','hi','en']) {
     if (source === target) continue;
     const pair = `${source}-${target}`, p = object(libre[pair]);
     if (typeof p.enabled !== 'boolean') continue;
-    rows.push({ label: `LibreTranslate ${pair}`, value: `${p.enabled === true ? 'enabled' : 'disabled'} \u00b7 ${p.eligible === true ? 'eligible' : 'ineligible'} \u00b7 ${p.available === true ? 'available' : 'unavailable'}` });
+    rows.push({ label: t('diagnosticLibreTranslate', { pair }), value: `${p.enabled === true ? 'enabled' : 'disabled'} \u00b7 ${p.eligible === true ? 'eligible' : 'ineligible'} \u00b7 ${p.available === true ? 'available' : 'unavailable'}` });
   }
-  rows.push({ label: 'Groq audio translation', value: object(root.groq_audio).configured === true ? 'configured' : 'not_configured' });
+  rows.push({ label: t('diagnosticGroqAudio'), value: object(root.groq_audio).configured === true ? 'configured' : 'not_configured' });
   return rows;
 }
