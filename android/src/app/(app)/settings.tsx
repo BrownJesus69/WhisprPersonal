@@ -1,3 +1,4 @@
+import { t as text } from '@/i18n';
 import { TranslationAPI } from '@/lib/translation/api';
 import { authedClient } from '@/lib/server/authedClient';
 import { translationDiagnostics } from '@/lib/export/diagnostics';
@@ -67,6 +68,8 @@ export default function Settings() {
     } }
   ]);
   return <Screen title="Settings">
+    <SectionHeader title={text('appearance')} />
+    <ChipSelect options={(['system','light','dark'] as const).map(value => ({ value, label: text(value) }))} selected={[s.appearance]} onSelect={appearance => s.set({ appearance })} />
     <SectionHeader title="Laptop" />
     <ConnectionPill />
     {!!s.serverUrl && <Text selectable style={{ ...typography.body, color: t.muted }}>{s.serverUrl}</Text>}

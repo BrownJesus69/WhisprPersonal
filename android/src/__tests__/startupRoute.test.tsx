@@ -30,7 +30,7 @@ const routes = {
   '(auth)/index': Welcome,
   '(auth)/sign-in': () => <Text>sign-in-screen</Text>,
   '(app)/_layout': () => <Stack />,
-  '(app)/index': () => <Text>events-screen</Text>,
+  '(app)/index': () => <Text>speak-screen</Text>,
 };
 const WELCOME = 'Be present. Keep the words.';
 
@@ -48,16 +48,16 @@ it('opens the welcome screen, not an unmatched route, when signed out', async ()
   expect(r.getByText(WELCOME)).toBeTruthy();
 });
 
-it('opens the events screen when signed in', async () => {
+it('opens the Speak screen when signed in', async () => {
   const r = await start(true);
   expect(r.getSegments()).toEqual(['(app)']);
-  expect(r.getByText('events-screen')).toBeTruthy();
+  expect(r.getByText('speak-screen')).toBeTruthy();
 });
 
-it('moves to the events screen after signing in', async () => {
+it('moves to the Speak screen after signing in', async () => {
   const r = await start(false);
   await act(async () => setSignedIn(true));
-  expect(r.getByText('events-screen')).toBeTruthy();
+  expect(r.getByText('speak-screen')).toBeTruthy();
   expect(r.queryByText(WELCOME)).toBeNull();
 });
 

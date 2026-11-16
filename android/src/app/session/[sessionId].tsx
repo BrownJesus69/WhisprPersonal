@@ -1,3 +1,5 @@
+import { BottomSheet } from '@/components/ui/BottomSheet';
+import { t as text } from '@/i18n';
 import { TranslationControl } from '@/components/TranslationControl';
 import { TranslationList } from '@/components/TranslationList';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -44,6 +46,7 @@ export default function SessionScreen() {
   const recording = useRecordingStore();
   const [deleting,setDeleting] = useState(false);
   const [tab, setTab] = useState<'raw' | 'polished' | 'translation'>('raw');
+  const [options, setOptions] = useState(false);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
   const client = useQueryClient();
@@ -100,17 +103,27 @@ export default function SessionScreen() {
         <LiveStatusPill status={live.status} attempt={live.attempt} />
         <LanguageBadge language={live.model.language} />
       </View>
-      <ScrollView style={{ maxHeight: '45%' }} contentContainerStyle={{ gap: 8 }}>
-      <Card>
-        <Text accessibilityRole="timer" style={{ ...typography.title, color: t.text, fontVariant: ['tabular-nums'] }}>{Math.floor(elapsed / 3600000).toString().padStart(2,'0')}:{Math.floor(elapsed / 60000 % 60).toString().padStart(2,'0')}:{Math.floor(elapsed / 1000 % 60).toString().padStart(2,'0')}</Text>
-        <Text style={{ ...typography.body, color: t.muted }}>{(own ? recording.phase : !session.consent_at ? 'Ready' : session.status).replaceAll('_', ' ').replace(/^./, c => c.toUpperCase())}</Text>
-        <LevelMeter dbfs={own ? recording.dbfs : -96} />
-      </Card>
       {phase === 'ready' && !recovered && <Banner message="Recording keeps going with the screen locked. Don't swipe away the recording notification." />}
       {recovered && <Banner message="Recording was interrupted. Saved audio was recovered. Resume recording or finish this session." />}
       {own && recording.message && <Banner error={recording.phase === 'error'} message={recording.message} />}
       {own && recording.warning && <Banner message={recording.warning} />}
       {session.last_error && !recovered && <Banner error message={`Session: ${session.last_error}`} />}
+      <View style={{ flex: 1 }}>
+      <TranscriptTabs translation={session.status === 'finalized'} selected={tab} onSelect={setTab} />
+      {!!live.model.language.timeline.length && <ScrollView horizontal style={{ flexGrow: 0 }} accessibilityLabel="Language timeline">
+        <Text selectable style={{ ...typography.label, color: t.muted }}>{live.model.language.timeline.map(s => `${languageName(s.language)} (${s.fromSequence + 1}–${s.toSequence + 1})`).join(' → ')}</Text>
+      </ScrollView>}
+      {tab === 'translation' ? <TranslationList session={session} originals={query.data?.transcript ?? []} rows={translation.rows} target={translation.target} /> : <TranscriptList polished={tab === 'polished'} stored={query.data?.transcript} onAddNote={row => act(async () => {
+        await createNote(session.event_id, { text: row.text, source: 'transcript', timestampMs: row.startMs, sessionId, sequence: row.sequence, language: row.language ?? null });
+        if (Platform.OS === 'android') ToastAndroid.show('Added to notes', ToastAndroid.SHORT);
+      })} model={live.model} chunkStarts={Object.fromEntries((query.data?.chunks ?? []).map(c => [c.sequence, c.start_ms]))} />}
+      </View>
+      <View style={{ gap: 8 }}>
+      <Card>
+        <Text accessibilityRole="timer" style={{ ...typography.title, color: t.text, fontVariant: ['tabular-nums'] }}>{Math.floor(elapsed / 3600000).toString().padStart(2,'0')}:{Math.floor(elapsed / 60000 % 60).toString().padStart(2,'0')}:{Math.floor(elapsed / 1000 % 60).toString().padStart(2,'0')}</Text>
+        <Text style={{ ...typography.body, color: t.muted }}>{(own ? recording.phase : !session.consent_at ? 'Ready' : session.status).replaceAll('_', ' ').replace(/^./, c => c.toUpperCase())}</Text>
+        <LevelMeter dbfs={own ? recording.dbfs : -96} />
+      </Card>
       {otherLive ? <>
         <Banner message="Another session needs attention. Stop it before starting this one." />
         <Button label="Open current session" onPress={() => router.push({ pathname: '/session/[sessionId]', params: { sessionId: recording.sessionId! } })} />
@@ -125,6 +138,9 @@ export default function SessionScreen() {
           await client.invalidateQueries({ queryKey: ['local-session', uid, sessionId] });
         })}
       />}
+      <Button secondary label={text('options')} onPress={() => setOptions(true)} />
+      </View>
+      <BottomSheet title={text('options')} visible={options} close={() => setOptions(false)}>
       <QuickNote eventId={session.event_id} sessionId={sessionId} phase={phase} elapsedMs={elapsed} />
       <QueueStatus chunks={query.data?.chunks ?? []} offline={['disconnected','error'].includes(connection)} retry={() => act(async () => { await uploadService.retryFailed(sessionId); })} />
       <Collapsible title="More options">
@@ -139,15 +155,8 @@ export default function SessionScreen() {
         ])} />
       </Collapsible>
       {translation.message && <Banner message={translation.message} />}
-      </ScrollView>
-      <TranscriptTabs translation={session.status === 'finalized'} selected={tab} onSelect={setTab} />
-      {!!live.model.language.timeline.length && <ScrollView horizontal style={{ flexGrow: 0 }} accessibilityLabel="Language timeline">
-        <Text selectable style={{ ...typography.label, color: t.muted }}>{live.model.language.timeline.map(s => `${languageName(s.language)} (${s.fromSequence + 1}–${s.toSequence + 1})`).join(' → ')}</Text>
-      </ScrollView>}
-      {tab === 'translation' ? <TranslationList session={session} originals={query.data?.transcript ?? []} rows={translation.rows} target={translation.target} /> : <TranscriptList polished={tab === 'polished'} stored={query.data?.transcript} onAddNote={row => act(async () => {
-        await createNote(session.event_id, { text: row.text, source: 'transcript', timestampMs: row.startMs, sessionId, sequence: row.sequence, language: row.language ?? null });
-        if (Platform.OS === 'android') ToastAndroid.show('Added to notes', ToastAndroid.SHORT);
-      })} model={live.model} chunkStarts={Object.fromEntries((query.data?.chunks ?? []).map(c => [c.sequence, c.start_ms]))} />}
+
+      </BottomSheet>
       <ConsentDialog visible={consent} cancel={() => setConsent(false)} confirm={() => {
         setConsent(false); act(() => recording.start(session, event.data?.title ?? 'Event recording', true));
       }} />

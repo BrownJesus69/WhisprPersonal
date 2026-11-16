@@ -1,3 +1,4 @@
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => {}) }));
 jest.mock('@react-native-firebase/app', () => ({ getApp: jest.fn(() => ({})) }));
 jest.mock('@react-native-firebase/auth', () => ({
   getAuth: jest.fn(() => ({ currentUser: { uid: 'test-user', email: 'test@example.test', providerData: [{ providerId: 'password' }] } })),

@@ -1,3 +1,5 @@
+import { useAuthStore } from '@/state/authStore';
+import { useSettingsStore } from '@/state/settingsStore';
 import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 import { router } from 'expo-router';
@@ -33,7 +35,9 @@ export function EventList() {
   const { events, loading, error, fromCache } = useMyEvents();
   const connected = useConnectionStore(s => ['connected', 'verified'].includes(s.status));
   const [search, setSearch] = useState('');
-  const filtered = events.filter(e => `${e.title} ${e.location}`.toLowerCase().includes(search.toLowerCase()));
+  const uid = useAuthStore(s => s.user?.uid);
+  const hiddenId = useSettingsStore(s => uid ? s.speakEventIds[uid] || (s.speakEventOwner === uid ? s.speakEventId : '') : '');
+  const filtered = events.filter(e => e.id !== hiddenId).filter(e => `${e.title} ${e.location}`.toLowerCase().includes(search.toLowerCase()));
   return <Screen title="Events">
     {!connected && <ConnectionPill />}
     <ButtonRow>

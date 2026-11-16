@@ -34,3 +34,13 @@ test('persistence round trip', async () => {
   await useSettingsStore.persist.rehydrate();
   expect(useSettingsStore.getState()).toMatchObject({ serverUrl: 'http://192.168.1.20:8000', chunkSeconds: 12 });
 });
+
+test('normalizes and persists appearance, recent languages and Speak event ownership', async () => {
+  expect(defaults.appearance).toBe('system');
+  expect(normalizeSettings({ appearance: 'invalid' as never, recentLanguages: ['kn','kn','bad' as never,'ta','en','hi'] })).toMatchObject({ appearance: 'system', recentLanguages: ['kn','ta','en'] });
+  for (const appearance of ['system','light','dark'] as const) expect(normalizeSettings({ appearance }).appearance).toBe(appearance);
+  useSettingsStore.getState().set({ appearance: 'dark', speakEventId: 'speak', speakEventOwner: 'owner', recentLanguages: ['ta'] });
+  await Promise.resolve(); const stored = await kv.getItem('whispr.settings');
+  useSettingsStore.setState(defaults); await kv.setItem('whispr.settings', stored!); await useSettingsStore.persist.rehydrate();
+  expect(useSettingsStore.getState()).toMatchObject({ appearance: 'dark', speakEventId: 'speak', speakEventOwner: 'owner', recentLanguages: ['ta'] });
+});

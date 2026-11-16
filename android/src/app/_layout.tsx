@@ -1,3 +1,11 @@
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
+import { Manrope_400Regular, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
+import { NotoSansKannada_400Regular, NotoSansKannada_600SemiBold, NotoSansKannada_700Bold } from '@expo-google-fonts/noto-sans-kannada';
+import { NotoSansTamil_400Regular, NotoSansTamil_600SemiBold, NotoSansTamil_700Bold } from '@expo-google-fonts/noto-sans-tamil';
+import { NotoSansDevanagari_400Regular, NotoSansDevanagari_600SemiBold, NotoSansDevanagari_700Bold } from '@expo-google-fonts/noto-sans-devanagari';
+import { fontFor, setFontsAvailable } from '@/theme/fonts';
+import { t } from '@/i18n';
 import { aiRuntime } from '@/lib/ai/runtime';
 import { useState, useEffect, useRef } from 'react';
 import { AudioRecorderProvider, useSharedAudioRecorder } from '@siteed/audio-studio';
@@ -18,6 +26,8 @@ import { ThemeContext, light, dark } from '@/theme';
 import { AuthGate } from '@/components/AuthGate';
 import { Banner } from '@/components/Banner';
 import { useAuthStore, type AppUser } from '@/state/authStore';
+
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function RecordingRuntime() {
   useEffect(() => { liveController.startRuntime(); return () => liveController.stopRuntime(); }, []);
@@ -79,15 +89,24 @@ function RecordingRuntime() {
 export default function RootLayout() {
   const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
   const signedIn = useAuthStore(s => s.status === 'signed_in');
-  const isDark = useColorScheme() === 'dark';
+  const [fontsLoaded, fontError] = useFonts({ Manrope_400Regular, Manrope_600SemiBold, Manrope_700Bold, NotoSansKannada_400Regular, NotoSansKannada_600SemiBold, NotoSansKannada_700Bold, NotoSansTamil_400Regular, NotoSansTamil_600SemiBold, NotoSansTamil_700Bold, NotoSansDevanagari_400Regular, NotoSansDevanagari_600SemiBold, NotoSansDevanagari_700Bold });
+  const [fontTimeout, setFontTimeout] = useState(false);
+  useEffect(() => { const timer = setTimeout(() => setFontTimeout(true), 5000); return () => clearTimeout(timer); }, []);
+  const fontsReady = fontsLoaded || !!fontError || fontTimeout;
+  setFontsAvailable(fontsLoaded);
+  useEffect(() => { if (fontsReady) void SplashScreen.hideAsync().catch(() => {}); }, [fontsReady]);
+  const appearance = useSettingsStore(s => s.appearance);
+  const scheme = useColorScheme();
+  const isDark = appearance === 'dark' || appearance === 'system' && scheme === 'dark';
   const theme = isDark ? dark : light;
+  if (!fontsReady) return null;
   return <SafeAreaProvider>
     <AudioRecorderProvider><QueryClientProvider client={client}>
       <ThemeContext.Provider value={theme}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <AuthGate>
           <RecordingRuntime />
-          <Stack screenOptions={{ headerStyle: { backgroundColor: theme.background }, headerTintColor: theme.text, contentStyle: { backgroundColor: theme.background } }}>
+          <Stack screenOptions={{ headerTitleStyle: { fontFamily: fontFor('', 700) }, headerStyle: { backgroundColor: theme.background }, headerTintColor: theme.text, contentStyle: { backgroundColor: theme.background } }}>
             <Stack.Protected guard={!signedIn}>
               <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             </Stack.Protected>
@@ -95,6 +114,7 @@ export default function RootLayout() {
               <Stack.Screen name="(app)" options={{ headerShown: false }} />
               <Stack.Screen name="connect" options={{ title: 'Connect laptop' }} />
               <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan laptop QR' }} />
+              <Stack.Screen name="events/index" options={{ title: t('events') }} />
               <Stack.Screen name="events/new" options={{ title: 'New event' }} />
               <Stack.Screen name="events/[eventId]/index" options={{ title: 'Event' }} />
               <Stack.Screen name="events/[eventId]/brief" options={{ title: 'Briefs' }} />

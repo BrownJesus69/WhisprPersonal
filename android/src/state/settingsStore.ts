@@ -4,6 +4,11 @@ import { kv } from '@/lib/storage/kv';
 import type { LanguageMode, PrivacyMode } from '@/types/models';
 
 export interface Settings {
+  appearance: 'system' | 'light' | 'dark';
+  recentLanguages: LanguageMode[];
+  speakEventIds: Record<string, string>;
+  speakEventId: string;
+  speakEventOwner: string;
   serverUrl: string;
   defaultLanguageMode: LanguageMode;
   audioQuality: 'low' | 'standard' | 'high';
@@ -15,6 +20,7 @@ export interface Settings {
 }
 
 export const defaults: Settings = {
+  appearance: 'system', recentLanguages: [], speakEventIds: {}, speakEventId: '', speakEventOwner: '',
   serverUrl: '',
   defaultLanguageMode: 'auto',
   audioQuality: 'standard',
@@ -28,6 +34,11 @@ export const defaults: Settings = {
 export function normalizeSettings(value: Partial<Settings>): Settings {
   const s = { ...defaults, ...value };
   return {
+    appearance: ['system', 'light', 'dark'].includes(s.appearance) ? s.appearance : 'system',
+    recentLanguages: Array.isArray(s.recentLanguages) ? [...new Set(s.recentLanguages.filter(l => ['auto','kn','ta','hi','en'].includes(l)))].slice(0, 3) : [],
+    speakEventIds: s.speakEventIds && typeof s.speakEventIds === 'object' && !Array.isArray(s.speakEventIds) ? Object.fromEntries(Object.entries(s.speakEventIds).filter(([, id]) => typeof id === 'string')) : {},
+    speakEventId: typeof s.speakEventId === 'string' ? s.speakEventId : '',
+    speakEventOwner: typeof s.speakEventOwner === 'string' ? s.speakEventOwner : '',
     serverUrl: typeof s.serverUrl === 'string' ? s.serverUrl : '',
     defaultLanguageMode: ['auto', 'kn', 'ta', 'hi', 'en'].includes(s.defaultLanguageMode) ? s.defaultLanguageMode : 'auto',
     audioQuality: ['low', 'standard', 'high'].includes(s.audioQuality) ? s.audioQuality : 'standard',

@@ -1,27 +1,12 @@
 export const light = {
-  background: '#F3F7F7',
-  surface: '#FFFFFF',
-  text: '#122E33',
-  muted: '#49636A',
-  primary: '#006B63',
-  onPrimary: '#FFFFFF',
-  border: '#BCCFD0',
-  danger: '#A42532',
-  warning: '#805400',
-  success: '#17663C',
-  info: '#285A96'
+  background: '#F7F6F2', surface: '#FFFFFF', subtle: '#EFEDE7', elevated: '#FFFFFF',
+  text: '#222521', muted: '#59615B', primary: '#17675A', onPrimary: '#FFFFFF',
+  border: '#DAD7CF', record: '#B3261E', onRecord: '#FFFFFF', danger: '#B3261E',
+  warning: '#7A5300', success: '#1E6B3A', info: '#2B5A8A'
 };
-
 export const dark = {
-  background: '#0D1D21',
-  surface: '#172C31',
-  text: '#ECF5F4',
-  muted: '#B3CBCB',
-  primary: '#7BD7C8',
-  onPrimary: '#003B35',
-  border: '#466369',
-  danger: '#FFB3BA',
-  warning: '#F4CA78',
-  success: '#8CDBAC',
-  info: '#ACCDFF'
+  background: '#141816', surface: '#1C221E', subtle: '#202722', elevated: '#252D27',
+  text: '#F1F3EE', muted: '#B4BDB4', primary: '#9DD8BE', onPrimary: '#102B20',
+  border: '#33403A', record: '#FFB4AB', onRecord: '#690005', danger: '#FFB4AB',
+  warning: '#F2C46D', success: '#9DD8A8', info: '#A8C8F0'
 };

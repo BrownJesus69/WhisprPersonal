@@ -3,7 +3,7 @@ import { light } from './colors';
 
 export { light, dark } from './colors';
 
-export { spacing } from './spacing';
+export { spacing, space, gutter } from './spacing';
 
 export { typography } from './typography';
 
