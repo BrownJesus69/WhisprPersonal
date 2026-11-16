@@ -33,51 +33,61 @@ async function connect() {
   </QueryClientProvider>);
 }
 
-test('Connect renders health from a mocked public request', async () => {
+test('Connect shows laptop details from a mocked public request', async () => {
   mockFetch().mockResolvedValue(response(health));
   const view = await connect();
-  await fireEvent.press(view.getByText('Test connection'));
-  await waitFor(() => expect(view.getByText('test-version')).toBeTruthy());
+  await fireEvent.press(view.getByText('Connect'));
+  await fireEvent.press(await view.findByLabelText('Laptop details'));
+  expect(view.getByText('test-version')).toBeTruthy();
   expect(view.getByText('Supported languages')).toBeTruthy();
   expect(view.getByText('test fixture model')).toBeTruthy();
+});
+
+test('Connect asks for the server key after reaching the laptop', async () => {
+  await credentials.setServerKey('');
+  mockFetch().mockResolvedValue(response(health));
+  const view = await connect();
+  await fireEvent.press(view.getByText('Connect'));
+  await view.findByText('Enter the server key shown on the laptop.');
+  expect(useSettingsStore.getState().serverUrl).toBe('http://192.168.1.20:8000');
+  expect(useConnectionStore.getState().status).toBe('error');
 });
 
 test('Connect explains unreachable laptop', async () => {
   mockFetch().mockRejectedValue(new Error('offline'));
   const view = await connect();
-  await fireEvent.press(view.getByText('Test connection'));
+  await fireEvent.press(view.getByText('Connect'));
   await waitFor(() => expect(view.getByText("Can't reach the laptop. Same Wi-Fi/Tailscale? Server running?")).toBeTruthy());
 });
 
-test('Connect verifies sign-in and obtains a pass with a Firebase token', async () => {
+test('one tap verifies sign-in, obtains a pass with a Firebase token, and saves', async () => {
   await credentials.clearPass();
   mockFetch()
     .mockResolvedValueOnce(response(health))
     .mockResolvedValueOnce(response({uid:'test-user',email:'test@example.test',email_verified:false,sign_in_provider:'password',server_version:'test-version',auth_method:'firebase',grant_expires_at:null}))
     .mockResolvedValueOnce(response({grant:'wpg1.component-test',expires_at:Date.now()/1000+43200,ttl_s:43200,grant_id:'component-pass'}));
   const view=await connect();
-  await fireEvent.press(view.getByText('Test connection'));
-  await view.findByText('test-version');
+  await act(async()=>useConnectionStore.getState().set({scannedUrl:'http://100.64.0.1:8000'}));
   await fireEvent.changeText(view.getByLabelText('Server key'),'component-test-key');
-  await fireEvent.press(view.getByText('Verify sign-in'));
-  await view.findByText(/Offline pass valid until/);
-  expect(view.getByText('Save connection')).toBeEnabled();
-  expect(view.getByText('test-user')).toBeOnTheScreen();
+  await fireEvent.press(view.getByText('Connect'));
+  await waitFor(() => expect(useConnectionStore.getState().status).toBe('connected'));
+  expect(useSettingsStore.getState().serverUrl).toBe('http://100.64.0.1:8000');
+  expect(useConnectionStore.getState().passExpiry).toBeGreaterThan(Date.now()/1000);
+  expect(await credentials.getServerKey()).toBe('component-test-key');
   expect(mockFetch().mock.calls[2][1]?.headers).toMatchObject({Authorization:'Bearer test-firebase-token'});
 });
 
-test('scanned URL replaces the address and requires a new test', async () => {
+test('scanned URL replaces the address', async () => {
   const view=await connect();
   await act(async()=>useConnectionStore.getState().set({scannedUrl:'http://100.64.0.1:8000'}));
-  expect(view.getByLabelText('Laptop URL')).toHaveDisplayValue('http://100.64.0.1:8000');
-  expect(view.getByText('Verify sign-in')).toBeDisabled();
+  expect(view.getByLabelText('Laptop address')).toHaveDisplayValue('http://100.64.0.1:8000');
 });
 
 test('Connect disables retries for Retry-After', async () => {
   mockFetch().mockResolvedValue(response({error:{code:'rate_limited',message:'wait',request_id:'test'}},429,'30'));
   const view=await connect();
-  await fireEvent.press(view.getByText('Test connection'));
+  await fireEvent.press(view.getByText('Connect'));
   await view.findByText('Too many requests. Try again in 30 seconds');
-  expect(view.getByText('Test connection')).toBeDisabled();
+  expect(view.getByLabelText('Connect')).toBeDisabled();
   expect(mockFetch()).toHaveBeenCalledTimes(1);
 });

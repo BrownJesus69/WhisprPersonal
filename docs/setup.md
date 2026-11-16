@@ -352,8 +352,8 @@ explicit uninstall (which removes phone data) or rebuilding with the correct ide
 
 Start the laptop and wait for model readiness. Keep both devices on the same trusted
 Wi-Fi/hotspot without client isolation. Scan QR from Connect laptop, or enter its LAN host
-and port; enter the shared key privately. Test connection and sign-in and inspect pass
-expiry in Settings. On a physical phone localhost points to the phone; the Android emulator
+and port; enter the shared key privately. Tap Connect, then check the pass
+expiry in Settings > Advanced. On a physical phone localhost points to the phone; the Android emulator
 can reach its host at `10.0.2.2`. For Tailscale, sign both devices into the intended tailnet,
 allow the peer/port, and use the laptop's Tailscale address (step by step, with a checker script:
 [remote access](remote-access.md)). Public router port forwarding

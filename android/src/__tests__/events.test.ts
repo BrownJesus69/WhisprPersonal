@@ -1,5 +1,5 @@
-import { setDoc, where, orderBy, limit, onSnapshot, Timestamp } from '@react-native-firebase/firestore';
-import { createEvent, mapEvent, subscribeMyEvents } from '@/lib/firebase/events';
+import { setDoc, getDoc, getDocFromCache, where, orderBy, limit, onSnapshot, Timestamp } from '@react-native-firebase/firestore';
+import { createEvent, getEvent, mapEvent, subscribeMyEvents } from '@/lib/firebase/events';
 import type { EventInput } from '@/types/models';
 const input: EventInput = {
   title: ' Event ',
@@ -77,4 +77,27 @@ test('a later server rejection is reported, not swallowed', async () => {
   await createEvent('owner', input, onSyncError);
   await new Promise(resolve => setImmediate(resolve));
   expect(onSyncError).toHaveBeenCalledWith(expect.objectContaining({ message: 'permission-denied' }));
+});
+
+describe('getEvent', () => {
+  const snap = (ownerId: string) => ({ id: 'event-1', exists: () => true, data: () => ({ ownerId, title: 'New', status: 'draft', privacyMode: 'local_only' }) });
+  beforeEach(() => { jest.mocked(getDoc).mockReset(); jest.mocked(getDocFromCache).mockReset(); });
+
+  test('opens a just-created event from the phone cache when the server read is denied', async () => {
+    jest.mocked(getDoc).mockRejectedValue(new Error('permission-denied'));
+    jest.mocked(getDocFromCache).mockResolvedValue(snap('owner') as never);
+    await expect(getEvent('event-1', 'owner')).resolves.toMatchObject({ id: 'event-1', title: 'New' });
+  });
+
+  test('still fails when neither the server nor the cache has it', async () => {
+    jest.mocked(getDoc).mockRejectedValue(new Error('permission-denied'));
+    jest.mocked(getDocFromCache).mockRejectedValue(new Error('unavailable'));
+    await expect(getEvent('event-1', 'owner')).rejects.toThrow('permission-denied');
+  });
+
+  test('never returns a cached event owned by someone else', async () => {
+    jest.mocked(getDoc).mockRejectedValue(new Error('permission-denied'));
+    jest.mocked(getDocFromCache).mockResolvedValue(snap('other') as never);
+    await expect(getEvent('event-1', 'owner')).rejects.toThrow('Event is not available');
+  });
 });

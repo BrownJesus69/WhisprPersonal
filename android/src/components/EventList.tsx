@@ -1,36 +1,50 @@
 import { useState } from 'react';
+import { Pressable, Text } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from './Screen';
 import { Button } from './Button';
+import { ButtonRow } from './ButtonRow';
 import { Banner } from './Banner';
-import { Card } from './Card';
 import { TextField } from './TextField';
-import { KeyValueRow } from './KeyValueRow';
-import { StatusBadge } from './StatusBadge';
 import { EmptyState } from './EmptyState';
 import { ConnectionPill } from './ConnectionPill';
 import { useMyEvents } from '@/hooks/useMyEvents';
+import { useConnectionStore } from '@/state/connectionStore';
+import { useTheme, typography, spacing } from '@/theme';
+import type { EventModel } from '@/types/models';
 
-export function EventList({ past = false }: {
-  past?: boolean;
-}) {
+const STATUS_TEXT: Record<EventModel['status'], string> = { draft: 'New', active: 'Recording', processing: 'Transcribing', completed: 'Done', failed: 'Needs attention' };
+
+function EventRow({ event }: { event: EventModel }) {
+  const t = useTheme();
+  const when = (event.startTime ?? event.createdAt)?.toDate().toLocaleDateString();
+  return <Pressable
+    accessibilityRole="button"
+    accessibilityLabel={event.title}
+    onPress={() => router.push({ pathname: '/events/[eventId]', params: { eventId: event.id } })}
+    style={({ pressed }) => ({ padding: spacing.md, gap: spacing.xs, borderRadius: 20, backgroundColor: t.surface, opacity: pressed ? 0.72 : 1 })}
+  >
+    <Text style={{ ...typography.heading, color: t.text }} numberOfLines={2}>{event.title}</Text>
+    <Text style={{ ...typography.body, color: t.muted }}>{[STATUS_TEXT[event.status], when, event.location].filter(Boolean).join(' · ')}</Text>
+  </Pressable>;
+}
+
+export function EventList() {
   const { events, loading, error, fromCache } = useMyEvents();
+  const connected = useConnectionStore(s => ['connected', 'verified'].includes(s.status));
   const [search, setSearch] = useState('');
-  const filtered = events.filter(e => (!past || ['completed', 'failed'].includes(e.status)) && `${e.title} ${e.location}`.toLowerCase().includes(search.toLowerCase()));
-  return <Screen title={past ? 'Your library' : 'Your events'}>
-    {past ? <Banner message="Past events are read-only. Library tools arrive in Phase 9." /> : <>
-      <ConnectionPill />
-      <Button label="Create event" onPress={() => router.push('/events/new')} />
-    </>}
-    <TextField label="Search title or location" value={search} onChangeText={setSearch} />
-    {fromCache && <Banner message="Offline · showing events saved on this device" />}
+  const filtered = events.filter(e => `${e.title} ${e.location}`.toLowerCase().includes(search.toLowerCase()));
+  return <Screen title="Events">
+    {!connected && <ConnectionPill />}
+    <ButtonRow>
+      <Button label="New event" onPress={() => router.push('/events/new')} />
+      <Button secondary label="Search notes" onPress={() => router.push('/search')} />
+    </ButtonRow>
+    {events.length > 5 && <TextField label="Filter events" value={search} onChangeText={setSearch} />}
+    {fromCache && <Banner message="Offline · showing events saved on this phone" />}
     {loading && <Banner message="Loading your events…" />}
-    {error && <Banner error message="Events could not be loaded. Check your connection and Firebase rules." />}
-    {!loading && !error && !filtered.length && <EmptyState message={search ? 'No matching events' : past ? 'No past events yet' : 'Your next event starts here.'} label={!past ? 'Create event' : undefined} onPress={() => router.push('/events/new')} />}
-    {filtered.map(e => <Card key={e.id}>
-      <StatusBadge status={e.status} />
-      <KeyValueRow label={e.title} value={e.location || 'Location not set'} />
-      <Button secondary label={e.status === 'active' && !past ? 'Resume' : `View ${e.title}`} onPress={() => router.push({ pathname: '/events/[eventId]', params: { eventId: e.id } })} />
-    </Card>)}
+    {error && <Banner error message="Events could not be loaded. Check your internet connection." />}
+    {!loading && !error && !filtered.length && <EmptyState message={search ? 'No matching events' : 'No events yet. Create one to start recording.'} />}
+    {filtered.map(e => <EventRow key={e.id} event={e} />)}
   </Screen>;
 }

@@ -1,6 +1,8 @@
 import type { Timestamp } from '@react-native-firebase/firestore';
 
 export const LANGUAGES = [{ code: 'kn', name: 'Kannada' }, { code: 'ta', name: 'Tamil' }, { code: 'hi', name: 'Hindi' }, { code: 'en', name: 'English' }] as const;
+/** Language choices for an event or recording: Auto plus each supported language. */
+export const LANGUAGE_MODE_OPTIONS: { value: LanguageMode; label: string }[] = [{ value: 'auto', label: 'Auto' }, ...LANGUAGES.map(l => ({ value: l.code, label: l.name }))];
 
 export type LanguageCode = typeof LANGUAGES[number]['code'];
 

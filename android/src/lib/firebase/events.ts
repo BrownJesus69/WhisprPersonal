@@ -90,8 +90,19 @@ export function subscribeMyEvents(uid: string, next: (events: EventModel[], from
   return onSnapshot(query(collection(getFirestore(), 'events'), where('ownerId', '==', uid), orderBy('updatedAt', 'desc'), limit(50)), { includeMetadataChanges: true }, snapshot => next(snapshot.docs.map(d => mapEvent(d.id, d.data())), snapshot.metadata.fromCache), error);
 }
 
+/**
+ * Reads the server copy, falling back to this phone's cache. A just-created event exists only
+ * in the cache until its background write lands, and the rules deny reading a document the
+ * server does not have yet, so a server-only read fails right after "Create event".
+ */
 export async function getEvent(id: string, uid: string) {
-  const snapshot = await getDoc(doc(getFirestore(), 'events', id));
+  const ref = doc(getFirestore(), 'events', id);
+  let snapshot;
+  try {
+    snapshot = await getDoc(ref);
+  } catch (error) {
+    snapshot = await getDocFromCache(ref).catch(() => { throw error; });
+  }
   if (!snapshot.exists())
     return null;
   const event = mapEvent(snapshot.id, snapshot.data() ?? {});

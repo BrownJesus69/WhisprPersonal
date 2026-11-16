@@ -82,10 +82,12 @@ test('export defaults raw, all transcript sessions, notes and no brief; saved br
   await waitFor(() => expect(shareDocument).toHaveBeenCalledTimes(2)); doc = jest.mocked(shareDocument).mock.calls[1][0]; expect(doc.content).toContain('Reviewed brief');
   expect(getCachedEvent).toHaveBeenCalled(); expect(getEvent).not.toHaveBeenCalled(); await view.unmount();
 });
-test('completed Library event links to transcript, saved brief screen and export', async () => {
+test('completed event links to transcript, brief, export, and vocabulary under More', async () => {
   const view = await mount(<EventDetail />); await view.findByLabelText('View transcript');
   await fireEvent.press(view.getByLabelText('View transcript')); expect(router.push).toHaveBeenCalledWith({ pathname: '/transcript/[sessionId]',params: { sessionId: session().id } });
-  expect(view.getByLabelText('Briefs')).toBeTruthy(); expect(view.getByLabelText('Export')).toBeTruthy(); expect(view.getByLabelText('Vocabulary')).toBeTruthy(); await view.unmount();
+  expect(view.getByLabelText('Brief')).toBeTruthy(); expect(view.getByLabelText('Export')).toBeTruthy();
+  expect(view.getByLabelText('Start recording')).toBeTruthy(); expect(view.queryByLabelText('Vocabulary')).toBeNull();
+  await fireEvent.press(view.getByLabelText('More')); expect(view.getByLabelText('Vocabulary')).toBeTruthy(); await view.unmount();
 });
 test('all Phase 9 routes are registered with titles', () => {
   const layout = readFileSync(resolve(process.cwd(),'src/app/_layout.tsx'),'utf8');

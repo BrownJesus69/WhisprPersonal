@@ -62,6 +62,7 @@ test('Settings shows disabled future integrations and separate laptop translatio
   useConnectionStore.setState({ status: 'connected', health: { ...health, integrations: { calendar: { enabled: false, status: 'disabled', docs: 'docs/integrations.md#calendar' } } } });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const v = await render(<QueryClientProvider client={client}><Settings /></QueryClientProvider>);
+  await fireEvent.press(v.getByLabelText('Advanced'));
   expect(v.getByText('Translation (on your laptop)')).toBeTruthy(); expect(v.getByText('Future integrations')).toBeTruthy();
   expect(v.getByText(/Disabled · Create and list calendar events/)).toBeTruthy();
   expect(v.getByText('Cloud Whisper')).toBeTruthy(); await v.unmount(); client.clear();

@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Screen } from '@/components/Screen';
 import { Banner } from '@/components/Banner';
 import { Card } from '@/components/Card';
+import { Collapsible } from '@/components/Collapsible';
 import { LiveStatusPill } from '@/components/LiveStatusPill';
 import { LanguageBadge, languageName } from '@/components/LanguageBadge';
 import { LanguagePicker } from '@/components/LanguagePicker';
@@ -102,10 +103,10 @@ export default function SessionScreen() {
       <ScrollView style={{ maxHeight: '45%' }} contentContainerStyle={{ gap: 8 }}>
       <Card>
         <Text accessibilityRole="timer" style={{ ...typography.title, color: t.text, fontVariant: ['tabular-nums'] }}>{Math.floor(elapsed / 3600000).toString().padStart(2,'0')}:{Math.floor(elapsed / 60000 % 60).toString().padStart(2,'0')}:{Math.floor(elapsed / 1000 % 60).toString().padStart(2,'0')}</Text>
-        <Text style={{ ...typography.body, color: t.muted }}>{own ? recording.phase : !session.consent_at ? 'Ready' : session.status}</Text>
+        <Text style={{ ...typography.body, color: t.muted }}>{(own ? recording.phase : !session.consent_at ? 'Ready' : session.status).replaceAll('_', ' ').replace(/^./, c => c.toUpperCase())}</Text>
         <LevelMeter dbfs={own ? recording.dbfs : -96} />
       </Card>
-      <Banner message="Recording continues with the screen locked. Keep the recording notification visible. Battery restrictions and force stop can interrupt capture." />
+      {phase === 'ready' && !recovered && <Banner message="Recording keeps going with the screen locked. Don't swipe away the recording notification." />}
       {recovered && <Banner message="Recording was interrupted. Saved audio was recovered. Resume recording or finish this session." />}
       {own && recording.message && <Banner error={recording.phase === 'error'} message={recording.message} />}
       {own && recording.warning && <Banner message={recording.warning} />}
@@ -126,15 +127,17 @@ export default function SessionScreen() {
       />}
       <QuickNote eventId={session.event_id} sessionId={sessionId} phase={phase} elapsedMs={elapsed} />
       <QueueStatus chunks={query.data?.chunks ?? []} offline={['disconnected','error'].includes(connection)} retry={() => act(async () => { await uploadService.retryFailed(sessionId); })} />
-      {!['stopped', 'finalized'].includes(session.status) && <LanguagePicker mode={live.model.language.mode} onSelect={mode => act(async () => {
-        await liveController.setOverride(sessionId, mode);
-        if (Platform.OS === 'android') ToastAndroid.show('Applies from the next chunk', ToastAndroid.SHORT);
-      })} />}
-      <Button secondary label="Delete session" loading={deleting} disabled={own && ['recording','paused','stopping','requesting_permission','error'].includes(recording.phase)} onPress={() => Alert.alert('Delete session?', 'Deletes session audio and transcript from this phone and the laptop. This cannot be undone. Event notes and saved briefs are kept.', [
-        { text: 'Cancel', style: 'cancel' }, { text: 'Delete session', style: 'destructive', onPress: () => { void removeSession(); } }
-      ])} />
-      <CleanupControl session={session} privacy={event.data?.privacyMode} />
-      <TranslationControl session={session} privacy={event.data?.privacyMode} target={translation.target} change={translation.setTarget} active={translation.active} job={translation.job} onSubmitted={() => setTab('translation')} />
+      <Collapsible title="More options">
+        {!['stopped', 'finalized'].includes(session.status) && <LanguagePicker mode={live.model.language.mode} onSelect={mode => act(async () => {
+          await liveController.setOverride(sessionId, mode);
+          if (Platform.OS === 'android') ToastAndroid.show('Applies from the next chunk', ToastAndroid.SHORT);
+        })} />}
+        <CleanupControl session={session} privacy={event.data?.privacyMode} />
+        <TranslationControl session={session} privacy={event.data?.privacyMode} target={translation.target} change={translation.setTarget} active={translation.active} job={translation.job} onSubmitted={() => setTab('translation')} />
+        <Button secondary label="Delete session" loading={deleting} disabled={own && ['recording','paused','stopping','requesting_permission','error'].includes(recording.phase)} onPress={() => Alert.alert('Delete session?', 'Deletes session audio and transcript from this phone and the laptop. This cannot be undone. Event notes and saved briefs are kept.', [
+          { text: 'Cancel', style: 'cancel' }, { text: 'Delete session', style: 'destructive', onPress: () => { void removeSession(); } }
+        ])} />
+      </Collapsible>
       {translation.message && <Banner message={translation.message} />}
       </ScrollView>
       <TranscriptTabs translation={session.status === 'finalized'} selected={tab} onSelect={setTab} />

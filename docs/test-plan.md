@@ -98,7 +98,7 @@ screen-reader actions. Use disposable consented test data for deletion/failure d
 | Spec test | Steps | Expected result |
 | --- | --- | --- |
 | Sign-in | Enable Email/Password; sign in online, renew pass, remove internet | Correct owner; offline pass expiry shown; expiry asks to reconnect without losing audio |
-| Event creation | Create event with location, speakers, languages/privacy offline, reconnect | Event opens locally; owner-only cloud sync; no credential fields |
+| Event creation | Create event offline with a name, one language, and optional location/speakers; reconnect | Event opens locally; owner-only cloud sync; no credential fields |
 | Server connection | Scan QR, enter key separately, test LAN then Tailscale | QR contains origin only; auth fails closed for wrong/unset key; configured model/queue visible |
 | Mic permission | Deny then allow permission at Start after consent | Clear denial; no capture before consent/permission; retry succeeds |
 | Screen locked | Record for several chunks with screen locked | Recording notification remains; elapsed time/audio continues; no missing interval on unlock |
@@ -108,11 +108,11 @@ screen-reader actions. Use disposable consented test data for deletion/failure d
 | WebSocket reconnect | Drop socket during speech and reconnect | Persisted cursor resumes; HTTP catch-up reconciles; no duplicate final rows |
 | Live transcript | Speak Kannada/Tamil/Hindi/English and mixed segments | Raw rows/language timeline update; uncertainty visible; manual override affects next chunk |
 | Notes | Quick note paused/recording; copy raw row; offline edit/conflict | Correct timestamp/source; local save first; conflicts retain both versions for explicit choice |
-| Finalization | Stop with pending chunks, reconnect and wait | Finalized when accounted for; missing/failed parts remain explicit; session readable in Library |
-| Brief | Generate eligible AI brief; review/edit/save; reopen from Library | Provider/model/warnings labelled; saved final edit used; unavailable providers preserve raw |
+| Finalization | Stop with pending chunks, reconnect and wait | Finalized when accounted for; missing/failed parts remain explicit; session readable from its event |
+| Brief | Generate eligible AI brief; review/edit/save; reopen from the event | Provider/model/warnings labelled; saved final edit used; unavailable providers preserve raw |
 | App restart recovery | Kill app during recording and during upload | Saved master/chunks recovered, interrupted state explained; no claim capture continued after kill |
 | Low connectivity | Drop internet while LAN works, throttle/drop LAN, expire pass | Local recording/notes safe; unexpired pass permits laptop; cloud sync waits; retry recovers |
-| Export | Library > event > Export; select sessions/raw/cleaned/notes/saved brief; share md/txt offline | Unicode intact; ordered sections, timestamps/gaps/fallback labels; PDF disabled; open received file and verify |
+| Export | Events > event > Export; select sessions/raw/cleaned/notes/saved brief; share md/txt offline | Unicode intact; ordered sections, timestamps/gaps/fallback labels; PDF disabled; open received file and verify |
 | Transcript viewer | Open session/search match with sequence; search combining Unicode; switch tabs | Read-only local rows, correct target/match count, polished fallback labels; no auto-follow; raw long-press adds note |
 | Vocabulary | Load, add event speakers, invalid >64-char term/>200 terms, save offline | Loaded list preserved; validation inline; no replacements UI; clear laptop requirement; new chunks use saved terms |
 | Diagnostics | Settings > Diagnostics with/without laptop; share TXT | Whitelisted status/counts only, host without credentials, no transcript/note/device ids/tokens/keys |

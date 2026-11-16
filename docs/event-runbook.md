@@ -94,7 +94,7 @@ its deletion). Conflicts never resolve themselves. A deletion conflict stays vis
 you decide. The header counts pending deletions as well as visible notes. Leave the app open
 or reopen it after connectivity returns to trigger retry; the laptop need not be connected.
 
-The Library's **Search notes and transcripts** searches this account's saved phone data.
+The Events screen's **Search notes** button searches this account's saved phone data.
 Enter two or more characters and pause briefly. Each section shows up to 50 newest matches;
 note results open event notes, and transcript results open the read-only viewer at the matching part. Event
 notes also have their own search box. Kannada, Tamil and Hindi combining marks are retained;

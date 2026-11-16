@@ -12,7 +12,6 @@ export default function AppLayout() {
     headerTintColor: t.text
   }}>
     <Tabs.Screen name="index" options={{ title: 'Events', tabBarIcon: ({ color }) => <Text style={{ color }}>◷</Text> }} />
-    <Tabs.Screen name="library" options={{ title: 'Library', tabBarIcon: ({ color }) => <Text style={{ color }}>▤</Text> }} />
     <Tabs.Screen name="settings" options={{ title: 'Settings', tabBarIcon: ({ color }) => <Text style={{ color }}>⚙</Text> }} />
   </Tabs>;
 }

@@ -36,11 +36,11 @@ translation, and exports produced on the laptop.
    - whether Docker auto-start, restart and sleep settings are right;
    - the address to use, with a QR code.
 7. **Phone, in the app:** Settings > Connect laptop. Scan the QR (or type the
-   `http://100.x.y.z:8000` address), then tap **Test connection**, enter the server key, and tap
-   **Verify sign-in** and **Save connection**. Use this one Tailscale address everywhere:
+   `http://100.x.y.z:8000` address), enter the server key, and tap **Connect**. Use this one
+   Tailscale address everywhere:
    it also works at home.
 8. **Real test:** turn Wi-Fi off on the phone (mobile data only), open the app and tap
-   **Test connection**. "Laptop · connected" means remote access works.
+   **Connect** in Settings > Laptop. "Laptop · connected" means remote access works.
 
 The Tailscale address (`100.x.y.z`) stays the same for this laptop. The MagicDNS name
 (`laptop-name.tailnet-name.ts.net`) also works and is accepted by the app.
@@ -49,7 +49,7 @@ The Tailscale address (`100.x.y.z`) stays the same for this laptop. The MagicDNS
 
 | Symptom | Fix |
 | --- | --- |
-| Test connection fails outside, works at home on the LAN address | You are still using the LAN address (`192.168.x.x`). Switch to the Tailscale address. |
+| Connect fails outside, works at home on the LAN address | You are still using the LAN address (`192.168.x.x`). Switch to the Tailscale address. |
 | Fails everywhere on the Tailscale address | Tailscale is off on the phone or laptop, or they are signed in to different accounts. Run `remote-check.bat`. |
 | `remote-check` passes but the phone still cannot connect | Windows Firewall is blocking inbound traffic on the Tailscale adapter. Allow TCP 8000 for the Tailscale interface only (Windows Security > Firewall > Advanced settings > Inbound rule, scope: Tailscale's `100.64.0.0/10`). Do not open it for Public networks. |
 | Worked yesterday, not today | The laptop slept, rebooted without signing in, or Docker Desktop was closed. Check its power and sign-in, then run `remote-check.bat`. |
