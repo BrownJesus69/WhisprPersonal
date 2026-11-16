@@ -1,3 +1,4 @@
+import { writeTransaction } from './writeQueue';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
 let opening: Promise<SQLiteDatabase> | undefined;
@@ -6,9 +7,10 @@ export function database(): Promise<SQLiteDatabase> {
 }
 async function open() {
   const db = await openDatabaseAsync('whispr.db');
+  await db.execAsync('PRAGMA busy_timeout = 5000;');
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  if ((version?.user_version ?? 0) < 1) await db.withExclusiveTransactionAsync(async tx => {
+  if ((version?.user_version ?? 0) < 1) await writeTransaction(db, async tx => {
     await tx.execAsync(`
       CREATE TABLE IF NOT EXISTS recording_sessions (
         id TEXT PRIMARY KEY, event_id TEXT NOT NULL, owner_uid TEXT NOT NULL,
@@ -32,7 +34,7 @@ async function open() {
       PRAGMA user_version = 1;
     `);
   });
-  if ((version?.user_version ?? 0) < 2) await db.withExclusiveTransactionAsync(async tx => {
+  if ((version?.user_version ?? 0) < 2) await writeTransaction(db, async tx => {
     await tx.execAsync(`
       CREATE TABLE transcript_chunks (
         session_id TEXT NOT NULL REFERENCES recording_sessions(id), sequence INTEGER NOT NULL,
@@ -59,7 +61,7 @@ async function open() {
       PRAGMA user_version = 2;
     `);
   });
-  if ((version?.user_version ?? 0) < 3) await db.withExclusiveTransactionAsync(async tx => {
+  if ((version?.user_version ?? 0) < 3) await writeTransaction(db, async tx => {
     await tx.execAsync(`
       CREATE TABLE notes (
         id TEXT PRIMARY KEY, event_id TEXT NOT NULL, owner_uid TEXT NOT NULL,
@@ -77,7 +79,7 @@ async function open() {
       PRAGMA user_version = 3;
     `);
   });
-  if ((version?.user_version ?? 0) < 4) await db.withExclusiveTransactionAsync(async tx => {
+  if ((version?.user_version ?? 0) < 4) await writeTransaction(db, async tx => {
     await tx.execAsync(`
       ALTER TABLE transcript_chunks ADD COLUMN polished_text TEXT;
       ALTER TABLE transcript_chunks ADD COLUMN polished_level TEXT;
@@ -97,12 +99,12 @@ async function open() {
       PRAGMA user_version = 4;
     `);
   });
-  if ((version?.user_version ?? 0) < 5) await db.withExclusiveTransactionAsync(async tx => {
+  if ((version?.user_version ?? 0) < 5) await writeTransaction(db, async tx => {
     await tx.execAsync(`CREATE TABLE pending_server_deletes (
       session_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, owner_uid TEXT NOT NULL
     ); PRAGMA user_version = 5;`);
   });
-  if ((version?.user_version ?? 0) < 6) await db.withExclusiveTransactionAsync(async tx => {
+  if ((version?.user_version ?? 0) < 6) await writeTransaction(db, async tx => {
     await tx.execAsync(`
       CREATE TABLE translations (
         session_id TEXT NOT NULL REFERENCES recording_sessions(id) ON DELETE CASCADE,

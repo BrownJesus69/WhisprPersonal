@@ -1,3 +1,4 @@
+import { writeTransaction } from './writeQueue';
 import type { Translation, TranslationJob, Target } from '../translation/types';
 import type { AIJob, BriefDraft, PolishedChunk } from '../ai/types';
 import { normalizeSearch, escapeLike, type Note, type SyncState } from '../notes/model';
@@ -131,7 +132,7 @@ export class SQLiteRepositories implements Repositories {
     return this.db.getAllAsync<Translation>('SELECT * FROM translations WHERE session_id=? AND target_lang=? ORDER BY sequence',sessionId,target);
   }
   async storeTranslations(sessionId: string, target: Target, rows: Translation[]) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       // A late response after deletion must never resurrect session content.
       if (!await tx.getFirstAsync('SELECT id FROM recording_sessions WHERE id=?',sessionId)) return;
       await tx.runAsync('DELETE FROM translations WHERE session_id=? AND target_lang=?',sessionId,target);
@@ -143,7 +144,7 @@ export class SQLiteRepositories implements Repositories {
     return rows.map(r => ({ ...r, session_ids: JSON.parse(r.session_ids) }));
   }
   async putTranslationJob(job: TranslationJob) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       for (const id of job.session_ids) if (!await tx.getFirstAsync('SELECT id FROM recording_sessions WHERE id=? AND owner_uid=?',id,job.owner_uid)) return;
       const row = { ...job, session_ids: JSON.stringify(job.session_ids) };
       await tx.runAsync(`${insertSql('translation_jobs',row)} ON CONFLICT(job_id) DO UPDATE SET status=excluded.status,error_code=excluded.error_code,updated_at=excluded.updated_at`,values(row));
@@ -152,7 +153,7 @@ export class SQLiteRepositories implements Repositories {
   pendingServerDeletes(owner: string) { return this.db.getAllAsync<PendingServerDelete>('SELECT * FROM pending_server_deletes WHERE owner_uid=?',owner); }
   async clearServerDelete(id: string, owner: string) { await this.db.runAsync('DELETE FROM pending_server_deletes WHERE session_id=? AND owner_uid=?',id,owner); }
   async deleteSessionRows(id: string, owner: string, pending: boolean) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       const session = await tx.getFirstAsync<LocalSession>('SELECT * FROM recording_sessions WHERE id=? AND owner_uid=?',id,owner);
       if (!session) return;
       if (pending) await tx.runAsync('INSERT OR IGNORE INTO pending_server_deletes VALUES (?,?,?)',id,session.event_id,owner);
@@ -171,7 +172,7 @@ export class SQLiteRepositories implements Repositories {
     return rows.map(r => ({ ...r, session_ids: JSON.parse(r.session_ids) }));
   }
   async finishAIJob(job: AIJob, draft?: BriefDraft) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       if (draft) {
         const row = { ...draft, session_ids: JSON.stringify(draft.session_ids) };
         await tx.runAsync(`${insertSql('brief_drafts', row)} ON CONFLICT(id) DO NOTHING`, values(row));
@@ -180,7 +181,7 @@ export class SQLiteRepositories implements Repositories {
     });
   }
   async storePolished(sessionId: string, chunks: PolishedChunk[], originals: TranscriptRow[]) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       for (const c of chunks) {
         const original = originals.find(r => r.sequence === c.sequence);
         if (!original) continue;
@@ -205,7 +206,7 @@ export class SQLiteRepositories implements Repositories {
     return (await this.db.getAllAsync<{ sync_state: SyncState }>('SELECT sync_state FROM notes WHERE owner_uid=? AND event_id=?', owner,eventId)).map(n => n.sync_state);
   }
   async putNote(note: Note) {
-    await this.db.withExclusiveTransactionAsync(async tx => { await tx.runAsync(insertSql('notes', note), values(note)); });
+    await writeTransaction(this.db, async tx => { await tx.runAsync(insertSql('notes', note), values(note)); });
   }
   note(id: string) { return this.db.getFirstAsync<Note>('SELECT * FROM notes WHERE id=?', id); }
   notes(owner: string, eventId: string, search = '') {
@@ -215,7 +216,7 @@ export class SQLiteRepositories implements Repositories {
     return this.db.getAllAsync<Note>("SELECT * FROM notes WHERE owner_uid=? AND sync_state='pending' AND next_attempt_at<=? ORDER BY updated_at,id LIMIT 50", owner, now);
   }
   async updateNote(id: string, patch: NotePatch) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       const current = await tx.getFirstAsync<Note>('SELECT * FROM notes WHERE id=?', id);
       if (!current) return;
       const row = typeof patch === 'function' ? patch(current) : patch;
@@ -236,7 +237,7 @@ export class SQLiteRepositories implements Repositories {
     return rows.filter(r => normalizeSearch(r.raw_text).includes(needle)).slice(0,cap).map(r => ({ ...r, segments: [], language_uncertain: !!r.language_uncertain, no_speech: !!r.no_speech }));
   }
   async upsertTranscript(row: TranscriptRow, observedSeq?: number) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       if (observedSeq !== undefined) {
         const session = await tx.getFirstAsync<{ last_event_seq: number }>('SELECT last_event_seq FROM recording_sessions WHERE id=?', row.session_id);
         if (!session || session.last_event_seq > observedSeq) return;
@@ -248,13 +249,13 @@ export class SQLiteRepositories implements Repositories {
     const rows = await this.db.getAllAsync<TranscriptSqlRow>('SELECT * FROM transcript_chunks WHERE session_id=? ORDER BY sequence', id);
     return rows.map(({ segments_json, ...r }) => ({ ...r, segments: JSON.parse(segments_json), language_uncertain: !!r.language_uncertain, no_speech: !!r.no_speech }));
   }
-  async appendLanguageEvent(row: LanguageEventRow) { await this.db.withExclusiveTransactionAsync(tx => appendLanguageEvent(tx, row)); }
+  async appendLanguageEvent(row: LanguageEventRow) { await writeTransaction(this.db, tx => appendLanguageEvent(tx, row)); }
   languageEvents(id: string) { return this.db.getAllAsync<LanguageEventRow>('SELECT * FROM language_events WHERE session_id=? ORDER BY seq', id); }
   async streamEvents(id: string): Promise<PersistedEvent[]> {
     return (await this.db.getAllAsync<{ event_json: string }>('SELECT event_json FROM stream_events WHERE session_id=? ORDER BY seq', id)).map(r => JSON.parse(r.event_json));
   }
   async persistEvent(e: PersistedEvent) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       const s = await tx.getFirstAsync<{ last_event_seq: number }>('SELECT last_event_seq FROM recording_sessions WHERE id=?', e.session_id);
       if (!s || e.seq <= s.last_event_seq) return;
       if (e.type === 'transcript_final' || e.type === 'transcript_revised') await upsertTranscript(tx, transcriptRow(e.session_id, e.data, e.ts));
@@ -265,10 +266,10 @@ export class SQLiteRepositories implements Repositories {
     });
   }
   async setLastEventSeq(id: string, seq: number) {
-    await this.db.withExclusiveTransactionAsync(async tx => { await tx.runAsync('UPDATE recording_sessions SET last_event_seq=MAX(last_event_seq,?) WHERE id=?', seq, id); });
+    await writeTransaction(this.db, async tx => { await tx.runAsync('UPDATE recording_sessions SET last_event_seq=MAX(last_event_seq,?) WHERE id=?', seq, id); });
   }
   async resetLastEventSeq(id: string) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       await tx.runAsync('DELETE FROM stream_events WHERE session_id=?', id);
       await tx.runAsync('DELETE FROM language_events WHERE session_id=?', id);
       await tx.runAsync('UPDATE recording_sessions SET last_event_seq=0,server_finalized_at=NULL WHERE id=?', id);
@@ -287,26 +288,26 @@ export class SQLiteRepositories implements Repositories {
   }
   async putSession(s: LocalSession) {
     const row = { ...s, expected_languages: JSON.stringify(s.expected_languages) };
-    await this.db.withExclusiveTransactionAsync(async tx => { await tx.runAsync(insertSql('recording_sessions', row), values(row)); });
+    await writeTransaction(this.db, async tx => { await tx.runAsync(insertSql('recording_sessions', row), values(row)); });
   }
   async updateSession(id: string, patch: Partial<LocalSession>) {
     const row = { ...patch, ...(patch.expected_languages ? { expected_languages: JSON.stringify(patch.expected_languages) } : {}) };
-    await this.db.withExclusiveTransactionAsync(tx => update(tx, 'recording_sessions', 'id', id, row));
+    await writeTransaction(this.db, tx => update(tx, 'recording_sessions', 'id', id, row));
   }
   chunks(sessionId: string) {
     return this.db.getAllAsync<LocalChunk>('SELECT * FROM chunks WHERE session_id=? ORDER BY sequence', sessionId);
   }
   async insertChunk(c: LocalChunk, progress?: { next_sequence: number; time_ms: number }) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       await tx.runAsync(insertSql('chunks', c), values(c));
       if (progress) await tx.runAsync('UPDATE recording_sessions SET next_sequence=MAX(next_sequence,?), time_ms=MAX(time_ms,?), updated_at=? WHERE id=?', progress.next_sequence, progress.time_ms, new Date().toISOString(), c.session_id);
     });
   }
   async updateChunk(id: string, patch: Partial<LocalChunk>) {
-    await this.db.withExclusiveTransactionAsync(tx => update(tx, 'chunks', 'chunk_id', id, patch));
+    await writeTransaction(this.db, tx => update(tx, 'chunks', 'chunk_id', id, patch));
   }
   async resetUploading(owner: string) {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await writeTransaction(this.db, async tx => {
       await tx.runAsync("UPDATE chunks SET status='pending' WHERE status='uploading' AND session_id IN (SELECT id FROM recording_sessions WHERE owner_uid=?)", owner);
     });
   }

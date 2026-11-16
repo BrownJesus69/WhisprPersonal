@@ -64,7 +64,7 @@ test('migration 3 and actual SQLite statements obey same semantics as memory twi
   await semantics(sqlite); await semantics(new MemoryRepositories());
 });
 test('SQL updates read and write on the same transaction connection', async () => {
-  const tx = { getFirstAsync: jest.fn(async () => note()), runAsync: jest.fn(async () => ({})) };
+  const tx = { execAsync: jest.fn(async () => {}), getFirstAsync: jest.fn(async () => note()), runAsync: jest.fn(async () => ({})) };
   const db = { withExclusiveTransactionAsync: jest.fn(async (cb: (tx: unknown) => Promise<void>) => cb(tx)), runAsync: jest.fn() };
   const repo = new SQLiteRepositories(db as unknown as SQLiteDatabase);
   await repo.updateNote(note().id, n => ({ revision: n.revision + 1 }));

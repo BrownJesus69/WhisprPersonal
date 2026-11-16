@@ -40,7 +40,7 @@ test('language event idempotence and offline hydration of final/revised/failure/
   expect(model.language.mode).toBe('ta'); expect(model.finalized?.failed).toEqual([1]); expect(model.lastSeq).toBe(5);
 });
 test('SQL event mutations and MAX cursor share the exclusive transaction connection', async () => {
-  const tx = { getFirstAsync: jest.fn(async () => ({ last_event_seq: 0 })), runAsync: jest.fn(async () => ({})) };
+  const tx = { execAsync: jest.fn(async () => {}), getFirstAsync: jest.fn(async () => ({ last_event_seq: 0 })), runAsync: jest.fn(async () => ({})) };
   const db = { withExclusiveTransactionAsync: jest.fn(async (callback: (tx: unknown) => Promise<void>) => callback(tx)), runAsync: jest.fn() };
   const repo = new SQLiteRepositories(db as unknown as SQLiteDatabase);
   await repo.persistEvent(finalEvent(1)); expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(1); expect(db.runAsync).not.toHaveBeenCalled();
