@@ -100,9 +100,12 @@ if ($addresses.Count -gt 0) {
     & docker compose @composeFiles exec -T server python -m app.cli qr $lanUrl
 }
 if (Get-Command tailscale -ErrorAction SilentlyContinue) {
-    $tailscaleIp = & cmd.exe /d /c "tailscale ip -4 2>nul"
-    if ($LASTEXITCODE -eq 0 -and $tailscaleIp) {
-        Write-Host "Tailscale URL: http://$($tailscaleIp.Trim()):$port"
+    $tailscaleIp = @(& cmd.exe /d /c "tailscale ip -4 2>nul")
+    if ($LASTEXITCODE -eq 0 -and $tailscaleIp.Count -gt 0 -and $tailscaleIp[0]) {
+        # Works at home and away; scan this one to use the app outside. See docs/remote-access.md.
+        $tailscaleUrl = "http://$($tailscaleIp[0].Trim()):$port"
+        Write-Host "Tailscale URL (use outside home): $tailscaleUrl"
+        & docker compose @composeFiles exec -T server python -m app.cli qr $tailscaleUrl
     }
 }
 Write-Host "Model: $($health.model.status); queue: $($health.queue.status)."

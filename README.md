@@ -59,11 +59,12 @@ content with the chosen receiving app. One laptop process/worker is supported.
 | Local translation | IndicTrans2 verified on this laptop; phone target picker, labelled Translation tab and optional export; LibreTranslate hi→en eligible but disabled until enabled; Groq emergency English audio fallback opt-in |
 | Disabled future integrations | Calendar, Drive, Gmail, App Check, FCM, web search and Cloud Whisper; [owner prerequisites](docs/integrations.md) |
 | Disabled pending keys/config | Groq and SambaNova each require both a key and an account-accessible model; local LLM requires explicit URL/model; Google Sign-In stays behind its feature flag |
-| Owner must configure | Enable Email/Password in Firebase console; deploy Firestore rules and indexes; set server shared secret and Firebase service-account path privately; choose provider keys/models if wanted; Tailscale is optional |
+| Owner must configure | Enable Email/Password in Firebase console; deploy Firestore rules and indexes; set server shared secret and Firebase service-account path privately; choose provider keys/models if wanted; Tailscale for use away from home ([remote access](docs/remote-access.md)) |
 | Not yet verified on a device | Full Phase 9 APK flows, native sharing, screen-lock endurance, failure drills, export readability and deletion recovery on real hardware |
 | Not available | PDF export and future integrations such as calendar/Drive/Gmail/App Check enforcement |
 
 A prior local APK build is documented in [android/README.md](android/README.md); it is not
 proof of Phase 9 device behavior. Run [automated checks and device matrix](docs/test-plan.md)
 and the [event rehearsal checklist](docs/event-runbook.md) before relying on this at an event.
+Away from home: [remote access over Tailscale](docs/remote-access.md).
 See [API](docs/api.md) and [architecture](docs/architecture.md). Follow AGENTS.md when contributing.

@@ -355,7 +355,8 @@ Wi-Fi/hotspot without client isolation. Scan QR from Connect laptop, or enter it
 and port; enter the shared key privately. Test connection and sign-in and inspect pass
 expiry in Settings. On a physical phone localhost points to the phone; the Android emulator
 can reach its host at `10.0.2.2`. For Tailscale, sign both devices into the intended tailnet,
-allow the peer/port, and use the laptop's Tailscale address. Public router port forwarding
+allow the peer/port, and use the laptop's Tailscale address (step by step, with a checker script:
+[remote access](remote-access.md)). Public router port forwarding
 is unnecessary and unsafe. Test after laptop restart with internet disabled.
 
 | Problem | Action |
