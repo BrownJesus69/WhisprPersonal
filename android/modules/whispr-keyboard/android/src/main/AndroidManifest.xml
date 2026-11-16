@@ -1,0 +1,12 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <application>
+    <service android:name="com.aditya.whisprkeyboard.WhisprKeyboardService"
+      android:label="WhisprPersonal" android:permission="android.permission.BIND_INPUT_METHOD"
+      android:exported="true">
+      <intent-filter><action android:name="android.view.InputMethod" /></intent-filter>
+      <meta-data android:name="android.view.im" android:resource="@xml/whispr_method" />
+    </service>
+  </application>
+</manifest>

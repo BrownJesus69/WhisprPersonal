@@ -236,7 +236,7 @@ async def upload(
             if sha256 is not None and digest != sha256.lower():
                 raise AppError(ErrorCode.checksum_mismatch, "Audio checksum does not match.")
             depth = await state.store.queue_depth()
-            if depth >= settings.queue_max_depth:
+            if depth + state.worker.dictation_pending >= settings.queue_max_depth:
                 raise AppError(
                     ErrorCode.queue_full,
                     "Transcription queue is full.",

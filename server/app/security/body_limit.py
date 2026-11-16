@@ -27,6 +27,8 @@ class BodyLimitMiddleware:
             if re.fullmatch(r"/api/v1/sessions/[^/]+/chunks", scope["path"])
             else self.settings.max_json_body_bytes
         )
+        if scope["path"] == "/api/v1/dictation":
+            limit = 4 * 1024 * 1024
         error = AppError(ErrorCode.payload_too_large, "Request body exceeds the size limit.")
         lengths = Headers(scope=scope).getlist("content-length")
         try:

@@ -1,3 +1,4 @@
+import { useSettingsStore } from '@/state/settingsStore';
 import { useState } from 'react';
 import { Alert, Linking, ScrollView, Text, View, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +16,7 @@ import { fontFor } from '@/theme/fonts';
 import { t } from '@/i18n';
 export default function Speak() {
   const s = useSpeak(), c = useTheme();
+  const dismissed = useSettingsStore(state => state.keyboardPromptDismissed);
   const [actionError, setActionError] = useState('');
   const listening = s.state === 'listening';
   const processing = ['starting','stopping','processing','slow'].includes(s.state);
@@ -40,6 +42,10 @@ export default function Speak() {
         {(s.state === 'processing' || s.state === 'slow') && s.disconnected && <InlineNotice title={t('offlineProcessing')} safety={t('safe')} action={t('connect')} onPress={() => router.push('/connect')} />}
         {s.state === 'slow' && !s.disconnected && <InlineNotice title={t('slow')} safety={t('safe')} action={t('openHistory')} onPress={openHistory} />}
         {(s.draftError || actionError) && <InlineNotice title={s.draftError ? t('draftFailed') : actionError} safety={s.draftError ? t('draftUnsafe') : t('safe')} action={t('retry')} onPress={() => { setActionError(''); act(s.flushDraft); }} />}
+        {s.state === 'complete' && !!s.draft.trim() && !dismissed && <View>
+          <Button secondary label={t('keyboardOtherApps')} onPress={() => { useSettingsStore.getState().set({ keyboardPromptDismissed: true }); router.push('/keyboard-setup'); }} />
+          <Button secondary label={t('keyboardDismiss')} onPress={() => useSettingsStore.getState().set({ keyboardPromptDismissed: true })} />
+        </View>}
         {complete && s.session ? <TranscriptResult key={s.session.id} session={s.session} text={s.draft} edit={s.editDraft} cleaned={s.cleaned} changeCleaned={s.changeCleaned} hasPolished={s.rows.some(r => !!r.polished_text)} flush={s.flushDraft} remove={s.remove} /> : <>
           {[...s.live.model.finals.values()].map(row => <Text key={row.sequence} selectable style={{ ...typography.transcript, color: c.text, fontFamily: fontFor(row.raw_text) }}>{row.raw_text}</Text>)}
           {[...s.live.model.partials].map(([sequence, segments]) => <Text key={sequence} style={{ ...typography.transcript, color: c.muted, fontStyle: 'italic', fontFamily: fontFor(segments.map(v => v.text).join(' ')) }}>{segments.map(v => v.text).join(' ')}</Text>)}

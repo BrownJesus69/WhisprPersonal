@@ -1,3 +1,4 @@
+import { startKeyboardSync } from '@/features/keyboard/syncKeyboard';
 import { applySpeakRetention } from '@/features/speak/retention';
 import { InlineNotice } from '@/components/ui/InlineNotice';
 import { useFonts } from 'expo-font';
@@ -95,6 +96,8 @@ function RecordingRuntime() {
 }
 
 export default function RootLayout() {
+  const [keyboardError, setKeyboardError] = useState(false);
+  useEffect(() => startKeyboardSync(() => setKeyboardError(true)), []);
   const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
   const signedIn = useAuthStore(s => s.status === 'signed_in');
   const [fontsLoaded, fontError] = useFonts({ Manrope_400Regular, Manrope_600SemiBold, Manrope_700Bold, NotoSansKannada_400Regular, NotoSansKannada_600SemiBold, NotoSansKannada_700Bold, NotoSansTamil_400Regular, NotoSansTamil_600SemiBold, NotoSansTamil_700Bold, NotoSansDevanagari_400Regular, NotoSansDevanagari_600SemiBold, NotoSansDevanagari_700Bold });
@@ -114,6 +117,7 @@ export default function RootLayout() {
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <AuthGate>
           <RecordingRuntime />
+          {keyboardError && <Banner error message={t('keyboardSyncFailed')} />}
           <Stack screenOptions={{ headerTitleStyle: { fontFamily: fontFor('', 700) }, headerStyle: { backgroundColor: theme.background }, headerTintColor: theme.text, contentStyle: { backgroundColor: theme.background } }}>
             <Stack.Protected guard={!signedIn}>
               <Stack.Screen name="(auth)" options={{ headerShown: false }} />
@@ -121,6 +125,7 @@ export default function RootLayout() {
             <Stack.Protected guard={signedIn}>
               <Stack.Screen name="(app)" options={{ headerShown: false }} />
               <Stack.Screen name="setup/index" options={{ title: t('setup') }} />
+              <Stack.Screen name="keyboard-setup" options={{ title: t('keyboardSetup') }} />
               <Stack.Screen name="personal-words" options={{ title: t('personalWords') }} />
               <Stack.Screen name="history/[sessionId]" options={{ title: t('transcript') }} />
               <Stack.Screen name="licenses" options={{ title: t('licenses') }} />

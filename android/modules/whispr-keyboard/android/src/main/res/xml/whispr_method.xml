@@ -1,0 +1,4 @@
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+  android:settingsActivity="com.aditya.whisprpersonal.MainActivity" android:supportsSwitchingToNextInputMethod="true">
+  <subtype android:label="@string/whispr_voice" android:imeSubtypeMode="voice" android:isAsciiCapable="false" />
+</input-method>

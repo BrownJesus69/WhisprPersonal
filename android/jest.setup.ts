@@ -1,3 +1,8 @@
+jest.mock('./modules/whispr-keyboard', () => ({ __esModule: true, default: {
+  setConfig: jest.fn(async () => {}), clearConfig: jest.fn(async () => {}),
+  isEnabled: jest.fn(async () => false), isSelected: jest.fn(async () => false),
+  openInputMethodSettings: jest.fn(async () => {}), showPicker: jest.fn(async () => {})
+} }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => {}) }));
 jest.mock('@react-native-firebase/app', () => ({ getApp: jest.fn(() => ({})) }));
 jest.mock('@react-native-firebase/auth', () => ({

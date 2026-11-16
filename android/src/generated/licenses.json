@@ -92,6 +92,10 @@
     "license": "MIT"
   },
   {
+    "name": "expo-keep-awake",
+    "license": "MIT"
+  },
+  {
     "name": "expo-linking",
     "license": "MIT"
   },

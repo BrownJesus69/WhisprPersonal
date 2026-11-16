@@ -408,3 +408,28 @@ Errors use `{error:{code,message,request_id}}`, without content, credentials or 
 The inventory performs no I/O. Flag off reports disabled; flag on still reports not_configured
 for these stubs. `features.translation` is removed: use the independent `translation` engine
 block or `/api/v1/translation/status`. The Phase 10a translation endpoint behavior is unchanged.
+# Voice keyboard dictation
+
+`POST /api/v1/dictation` accepts multipart `file` (16 kHz, mono, 16-bit PCM WAV,
+at most 120 seconds), optional `language` (`auto` by default or a configured supported
+language), and optional `event_id`. It requires the same server-key and Firebase Bearer
+authentication and rate limits as sessions. Unconfigured authentication fails closed.
+
+The response is `{ "text": "...", "language": "en", "duration_ms": 12000 }`;
+`language` is null for silence. Inference uses the live engine's `turbo` profile and
+single-worker executor, with bounded queue admission. Owned event vocabulary supplies
+hotwords; an event whose ownership cannot be verified offline supplies no hotwords.
+A known ownership mismatch returns 404. Vocabulary replacements and LLM cleanup are
+never applied.
+
+The route alone allows a 4 MiB multipart body. Invalid WAV format/rate/channel count,
+truncation, empty audio, unsupported language or recordings over 120 seconds return
+422 `validation_error`. A larger body returns 413 `payload_too_large`; unavailable
+recognition returns 503 `model_not_ready`, and a full queue returns 503 `queue_full`.
+Errors use the standard `error.code`, `error.message`, `error.request_id` envelope.
+
+This endpoint keeps no history and writes neither transcript text nor audio to the
+session store or Firestore. Temporary audio is deleted in `finally`, even if inference
+fails or the caller disconnects. Completion logs contain request ID and duration,
+never transcript text. Clients insert text only after checking their current editor;
+the endpoint never sends a message or performs an editor action.

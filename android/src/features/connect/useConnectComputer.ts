@@ -1,3 +1,4 @@
+import { syncKeyboard } from '@/features/keyboard/syncKeyboard';
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '@/state/settingsStore';
 import { useConnectionStore } from '@/state/connectionStore';
@@ -66,6 +67,7 @@ export function useConnectComputer(onConnected?: (ready: boolean) => void) {
       if (result.auth.grants.enabled)
         await createTokenManager(url).ensurePass();
       settings.set({ serverUrl: url });
+      await syncKeyboard().catch(() => setMessage(t('keyboardSyncFailed')));
       connection.set({ status: 'connected' });
       onConnected?.(result.model.status === 'ready');
     }

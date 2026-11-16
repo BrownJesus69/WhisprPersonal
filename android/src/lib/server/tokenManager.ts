@@ -1,3 +1,4 @@
+import { clearKeyboardConfig } from '@/features/keyboard/syncKeyboard';
 import { getNetworkStateAsync } from 'expo-network';
 import { auth } from '@/lib/firebase/auth';
 import { credentials } from './credentials';
@@ -108,7 +109,8 @@ export async function signOutAccount() {
   finally {
     await credentials.clearPass();
     useConnectionStore.getState().set({ check: null, passExpiry: null, status: 'disconnected' });
-    await auth.signOut();
+    try { await clearKeyboardConfig(); }
+    finally { await auth.signOut(); }
   }
 }
 

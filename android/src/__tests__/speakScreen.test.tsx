@@ -28,6 +28,18 @@ test('at rest there is exactly one primary button, Start speaking', async () => 
   expect(Clipboard.setStringAsync).not.toHaveBeenCalled();
   await fireEvent.press(view.getByRole('button', { name: t('start') })); expect(start).toHaveBeenCalledTimes(1);
 });
+
+test('keyboard suggestion starts after success and stays dismissed across mounts', async () => {
+  jest.mocked(useSpeak).mockReturnValue(model({ state: 'complete', session: session(), draft: 'my words' }) as never);
+  const view = await render(<Speak />);
+  expect(view.getByLabelText(t('keyboardOtherApps'))).toBeTruthy();
+  await fireEvent.press(view.getByLabelText(t('keyboardDismiss')));
+  expect(view.queryByLabelText(t('keyboardOtherApps'))).toBeNull();
+  expect(useSettingsStore.getState().keyboardPromptDismissed).toBe(true);
+  await view.unmount();
+  const again = await render(<Speak />);
+  expect(again.queryByLabelText(t('keyboardOtherApps'))).toBeNull();
+});
 test('language choice persists in two taps and updates the chip', async () => {
   const view = await render(<Speak />);
   await fireEvent.press(view.getByRole('button', { name: t('languageChip', { name: t('auto') }) }));

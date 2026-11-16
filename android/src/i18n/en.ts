@@ -1,4 +1,13 @@
 export const en = {
+  keyboard: 'Keyboard', keyboardSetup: 'Set up your voice keyboard', keyboardOtherApps: 'Use WhisprPersonal in other apps',
+  reviewBeforeInsert: 'Review before inserting', keyboardHaptics: 'Haptics', keyboardDismiss: 'Dismiss keyboard suggestion',
+  keyboardEnable: 'Turn on the WhisprPersonal keyboard', keyboardOpenSettings: 'Open keyboard settings',
+  keyboardWarning: "Android shows a standard warning that a keyboard can see what you type. WhisprPersonal sends audio only to your computer. To add a space, it reads only the one character before the cursor. If you tap Undo, it checks the inserted text before removing it.",
+  keyboardSwitch: 'Switch to it', keyboardChoose: 'Choose keyboard', keyboardTry: 'Try it',
+  keyboardTest: 'Try speaking here', keyboardEnabled: 'Keyboard is enabled', keyboardSelected: 'Keyboard is selected',
+  keyboardPending: 'Not yet', keyboardTestDone: 'Text entered', keyboardUnavailable: 'Keyboard settings could not be checked. Try again.',
+  keyboardSyncFailed: 'Keyboard setup could not be saved. Reopen WhisprPersonal to retry.',
+
   setup: 'Set up WhisprPersonal', chooseLanguage: 'Choose your language', connectComputer: 'Connect your computer', tryIt: 'Try it',
   tryHelp: 'Tap Start speaking, then allow microphone access when asked.', notNow: 'Not now', next: 'Continue', back: 'Back',
   computerAddress: 'Computer address', serverKey: 'Server key', scanQR: 'Scan QR', connectAction: 'Connect',

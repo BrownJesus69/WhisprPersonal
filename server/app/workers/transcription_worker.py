@@ -131,6 +131,7 @@ class TranscriptionWorker:
         self.background: set[asyncio.Task[None]] = set()
         self.audio_fallback: Any = None
         self.audio_translation_jobs: Any = None
+        self.dictation_pending = 0
 
     def session_lock(self, session_id: str) -> asyncio.Lock:
         return self.session_locks.setdefault(session_id, asyncio.Lock())

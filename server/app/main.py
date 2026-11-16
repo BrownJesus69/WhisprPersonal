@@ -19,6 +19,7 @@ from app.routers import (
     ai,
     auth,
     diagnostics,
+    dictation,
     export,
     health,
     sessions,
@@ -197,6 +198,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(diagnostics.router)
     app.include_router(sessions.router)
+    app.include_router(dictation.router)
     app.include_router(stream.router)
     app.include_router(vocabulary.router)
     # add_middleware prepends: register from innermost to outermost.

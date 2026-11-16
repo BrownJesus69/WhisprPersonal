@@ -1,0 +1,23 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'com.aditya.whisprkeyboard'
+version = '1.0.0'
+android {
+  namespace 'com.aditya.whisprkeyboard'
+  defaultConfig { versionCode 1; versionName '1.0.0' }
+}
+// Reuse the installed RNFirebase SDK and its BOM; add no external dependency/version.
+def firebaseAuth = findProject(':react-native-firebase_auth') ?: findProject(':@react-native-firebase_auth')
+if (firebaseAuth == null) throw new GradleException('Whispr keyboard requires the installed RNFirebase auth module')
+evaluationDependsOn(firebaseAuth.path)
+dependencies {
+  implementation project(firebaseAuth.path)
+  // FirebaseAuth is an implementation dependency of RNFirebase, so it is not exposed
+  // on consumers' compile classpaths. Copy those existing declarations (including BOM
+  // attributes) for compilation; RNFirebase continues to supply the runtime artifacts.
+  firebaseAuth.configurations.implementation.allDependencies.each { dependency ->
+    compileOnly dependency.copy()
+  }
+}

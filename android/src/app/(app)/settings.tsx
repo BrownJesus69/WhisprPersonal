@@ -77,6 +77,11 @@ export default function Settings() {
       <Text style={{ ...typography.caption, color: colors.muted }}>{t(unavailable ? 'notSetUpComputer' : 'cleanupAvailable')}</Text>
       <SettingsRow title={t('personalWords')} description={t('personalWordsHelp')} onPress={() => router.push('/personal-words')} />
     </SettingsGroup>
+    <SettingsGroup title={t('keyboard')}>
+      <SettingsRow title={t('keyboardOtherApps')} onPress={() => router.push('/keyboard-setup')} />
+      <SettingsRow title={t('reviewBeforeInsert')}><Switch style={{ minHeight: 48, minWidth: 48 }} accessibilityLabel={t('reviewBeforeInsert')} value={s.reviewBeforeInsert} onValueChange={reviewBeforeInsert => s.set({ reviewBeforeInsert })} /></SettingsRow>
+      <SettingsRow title={t('keyboardHaptics')}><Switch style={{ minHeight: 48, minWidth: 48 }} accessibilityLabel={t('keyboardHaptics')} value={s.haptics} onValueChange={haptics => s.set({ haptics })} /></SettingsRow>
+    </SettingsGroup>
     <SettingsGroup title={t('privacy')}>
       <SettingsRow title={t('keepTranscripts')} description={t('keepHelp')}><Switch style={{ minHeight: 48, minWidth: 48 }} accessibilityLabel={t('keepTranscripts')} value={s.keepTranscripts} onValueChange={keepTranscripts => s.set({ keepTranscripts })} /></SettingsRow>
       {!s.keepTranscripts && <Text style={{ ...typography.caption, color: colors.muted }}>{t('retentionHelp')}</Text>}
