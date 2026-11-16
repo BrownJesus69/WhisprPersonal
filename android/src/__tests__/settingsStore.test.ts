@@ -16,6 +16,18 @@ test('safe defaults', () => {
   });
 });
 
+test('onboarding migrates existing connections and normalizes retention', async () => {
+  expect(normalizeSettings({})).toMatchObject({ onboarding: 'pending', keepTranscripts: true });
+  expect(normalizeSettings({ serverUrl: 'http://192.168.1.20:8000' }).onboarding).toBe('done');
+  expect(normalizeSettings({ serverUrl: ' ', onboarding: 'invalid' as never }).onboarding).toBe('pending');
+  expect(normalizeSettings({ onboarding: 'pending', serverUrl: 'http://192.168.1.20:8000' }).onboarding).toBe('pending');
+  expect(normalizeSettings({ onboarding: 'done', keepTranscripts: false })).toMatchObject({ onboarding: 'done', keepTranscripts: false });
+  expect(normalizeSettings({ keepTranscripts: 'false' as never }).keepTranscripts).toBe(true);
+  await kv.setItem('whispr.settings', JSON.stringify({ state: { serverUrl: 'http://192.168.1.20:8000' }, version: 0 }));
+  await useSettingsStore.persist.rehydrate();
+  expect(useSettingsStore.getState()).toMatchObject({ onboarding: 'done', keepTranscripts: true });
+});
+
 test('bounds are enforced', () => {
   useSettingsStore.getState().set({ chunkSeconds: 100, overlapMs: 0 });
   expect(useSettingsStore.getState()).toMatchObject({ chunkSeconds: 15, overlapMs: 1000 });

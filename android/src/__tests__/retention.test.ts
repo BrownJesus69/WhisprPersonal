@@ -1,0 +1,61 @@
+import { retentionEligible, applySpeakRetention, removePhoneAudio, removeRecording } from '@/features/speak/retention';
+import { defaults, useSettingsStore } from '@/state/settingsStore';
+import { repositories } from '@/lib/db/repositories';
+import { MemoryRepositories } from '@/lib/db/memoryRepositories';
+import { deleteSession, LaptopUnavailable } from '@/lib/session/deleteSession';
+import { kv } from '@/lib/storage/kv';
+import { draftKey } from '@/features/speak/drafts';
+import { session, chunk } from './recordingFixtures';
+import { File } from 'expo-file-system';
+import { sessionDirectory } from '@/lib/audio/chunkFiles';
+jest.mock('@/lib/db/repositories', () => ({ ...jest.requireActual('@/lib/db/repositories'), repositories: jest.fn() }));
+jest.mock('@/lib/session/deleteSession', () => ({ ...jest.requireActual('@/lib/session/deleteSession'), deleteSession: jest.fn(async () => {}) }));
+jest.mock('@/lib/server/authedClient', () => ({ authedClient: () => null }));
+const now = Date.parse('2026-11-16T12:00:00Z');
+const old = new Date(now - 86400001).toISOString();
+test.each(['recording', 'paused', 'stopped', 'interrupted', 'finalizing', 'failed'] as const)('retention never removes %s', status => {
+  expect(retentionEligible(session({ status, event_id: 'speak', updated_at: old }), 'owner', 'speak', 'start', now)).toBe(false);
+});
+test('eligibility is owner and Speak only, finalized, and older than 24 hours at startup', () => {
+  const s = session({ status: 'finalized', event_id: 'speak', updated_at: old });
+  expect(retentionEligible(s, 'owner', 'speak', 'startup', now)).toBe(true);
+  expect(retentionEligible(s, 'other', 'speak', 'start', now)).toBe(false);
+  expect(retentionEligible(s, 'owner', 'event', 'start', now)).toBe(false);
+  expect(retentionEligible(s, 'owner', '', 'start', now)).toBe(false);
+  expect(retentionEligible({ ...s, server_finalized_at: new Date(now - 86400000).toISOString() }, 'owner', 'speak', 'startup', now)).toBe(false);
+  expect(retentionEligible({ ...s, updated_at: new Date(now).toISOString() }, 'owner', 'speak', 'start', now)).toBe(true);
+});
+test('retention deletes finalized Speak sessions and both drafts; default keeps them', async () => {
+  const repo = new MemoryRepositories(); jest.mocked(repositories).mockResolvedValue(repo);
+  const s = session({ status: 'finalized', event_id: 'speak' }); await repo.putSession(s);
+  await repo.putSession(session({ id: 'unfinished', event_id: 'speak', status: 'stopped' }));
+  await repo.putSession(session({ id: 'event', event_id: 'event', status: 'finalized' }));
+  useSettingsStore.setState({ ...defaults, speakEventIds: { owner: 'speak' } });
+  await applySpeakRetention('owner', 'start'); expect(deleteSession).not.toHaveBeenCalled();
+  useSettingsStore.setState({ keepTranscripts: false });
+  await kv.setItem(draftKey('owner', s.id), 'draft'); await kv.setItem(draftKey('owner', s.id, true), 'cleaned');
+  await applySpeakRetention('owner', 'start');
+  expect(deleteSession).toHaveBeenCalledTimes(1);
+  expect(deleteSession).toHaveBeenCalledWith(expect.objectContaining({ id: s.id }));
+  expect(await kv.getItem(draftKey('owner', s.id))).toBeNull(); expect(await kv.getItem(draftKey('owner', s.id, true))).toBeNull();
+});
+test('phone audio deletion marks chunks but preserves the session and text', async () => {
+  const repo = new MemoryRepositories(); jest.mocked(repositories).mockResolvedValue(repo);
+  const s = session({ status: 'finalized' }); await repo.putSession(s); await repo.insertChunk(chunk());
+  const dir = sessionDirectory(s.id); dir.create();
+  const firstMaster = new File(dir, 'master.wav'), recoveredMaster = new File(dir, `master_10000_${'a'.repeat(32)}.wav`);
+  firstMaster.create(); recoveredMaster.create();
+  await removePhoneAudio('owner', s.id);
+  expect(firstMaster.exists).toBe(false); expect(recoveredMaster.exists).toBe(false);
+  expect(await repo.session(s.id)).toMatchObject({ status: 'finalized', master_uri: '' });
+  expect((await repo.chunks(s.id))[0].local_deleted).toBe(1);
+  await repo.updateSession(s.id, { status: 'finalizing' });
+  await expect(removePhoneAudio('owner', s.id)).rejects.toThrow('not_finalized');
+});
+test('an unreachable computer uses the existing phone-only deletion and retry queue', async () => {
+  const repo = new MemoryRepositories(); jest.mocked(repositories).mockResolvedValue(repo);
+  await repo.putSession(session({ status: 'finalized' }));
+  jest.mocked(deleteSession).mockRejectedValueOnce(new LaptopUnavailable());
+  expect(await removeRecording('owner', session().id)).toEqual({ pending: true });
+  expect(deleteSession).toHaveBeenLastCalledWith(expect.objectContaining({ phoneOnly: true, id: session().id }));
+});

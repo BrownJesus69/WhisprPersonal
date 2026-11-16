@@ -1,11 +1,14 @@
+import { useSettingsStore } from '@/state/settingsStore';
 import { fontFor } from '@/theme/fonts';
 import { t as text } from '@/i18n';
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { Text } from 'react-native';
 import { useTheme } from '@/theme';
 
 export default function AppLayout() {
   const t = useTheme();
+  const onboarding = useSettingsStore(s => s.onboarding);
+  if (onboarding === 'pending') return <Redirect href="/setup" />;
   return <Tabs screenOptions={{
     tabBarLabelStyle: { fontFamily: fontFor('', 600) },
     headerTitleStyle: { fontFamily: fontFor('', 700) },

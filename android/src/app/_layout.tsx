@@ -1,3 +1,5 @@
+import { applySpeakRetention } from '@/features/speak/retention';
+import { InlineNotice } from '@/components/ui/InlineNotice';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { Manrope_400Regular, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
@@ -18,7 +20,7 @@ import { uploadService } from '@/lib/upload/uploadService';
 import { liveController } from '@/lib/live/liveController';
 import { useSettingsStore } from '@/state/settingsStore';
 import { useColorScheme } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -45,6 +47,7 @@ function RecordingRuntime() {
   }, [uid, url]);
   const [recoveredOwner, setRecoveredOwner] = useState<AppUser | null>(null);
   const [recoveryError, setRecoveryError] = useState(false);
+  const [retentionNotice, setRetentionNotice] = useState('');
   const [noteSyncError, setNoteSyncError] = useState(false);
   useEffect(() => {
     let disposed = false;
@@ -61,6 +64,10 @@ function RecordingRuntime() {
       const state = useRecordingStore.getState();
       const live = ref.current.isRecording || ref.current.isPaused ? state.sessionId : null;
       await recoverSessions(repo, uid, live);
+      try {
+        const result = await applySpeakRetention(uid, 'startup');
+        if (!disposed) setRetentionNotice(result.failed ? t('retentionFailed') : result.pending ? t('deletePending') : '');
+      } catch { if (!disposed) setRetentionNotice(t('retentionFailed')); }
       if (!disposed) setRecoveredOwner(user);
     }).catch(() => { if (!disposed) setRecoveryError(true); });
     return () => { disposed = true; };
@@ -80,6 +87,7 @@ function RecordingRuntime() {
     }
   }, [uid]);
   return <>
+    {!!retentionNotice && <InlineNotice title={retentionNotice} safety={t('retentionSafe')} action={t('connect')} onPress={() => router.push('/connect')} />}
     {aiError && <Banner message="AI requests could not resume. Reopen the app to retry. Raw transcript is preserved." />}
     {recoveryError && <Banner error message="Local audio recovery needs attention. Reopen the app to retry. Saved files are retained." />}
     {noteSyncError && <Banner error message="Notes sync could not start. Notes stay on this phone. Reopen the app to retry." />}
@@ -112,7 +120,12 @@ export default function RootLayout() {
             </Stack.Protected>
             <Stack.Protected guard={signedIn}>
               <Stack.Screen name="(app)" options={{ headerShown: false }} />
-              <Stack.Screen name="connect" options={{ title: 'Connect laptop' }} />
+              <Stack.Screen name="setup/index" options={{ title: t('setup') }} />
+              <Stack.Screen name="personal-words" options={{ title: t('personalWords') }} />
+              <Stack.Screen name="history/[sessionId]" options={{ title: t('transcript') }} />
+              <Stack.Screen name="licenses" options={{ title: t('licenses') }} />
+              <Stack.Screen name="privacy-info" options={{ title: t('privacy') }} />
+              <Stack.Screen name="connect" options={{ title: t('connect') }} />
               <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan laptop QR' }} />
               <Stack.Screen name="events/index" options={{ title: t('events') }} />
               <Stack.Screen name="events/new" options={{ title: 'New event' }} />

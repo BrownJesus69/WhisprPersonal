@@ -51,6 +51,23 @@ test('start, listening, immediate stopping, processing and finalized text in seq
   await repo.updateSession(id, { status: 'finalized' }); await tick();
   expect(hook.result.current.state).toBe('complete'); expect(hook.result.current.draft).toBe('first second');
 });
+
+test('next Speak start removes finalized Speak recordings when retention is off', async () => {
+  useSettingsStore.setState({ keepTranscripts: false, speakEventIds: { owner: 'speak-event' } });
+  await repo.putSession(session({ id: 'ses_aaaaaaaaaaaaaaaaaaaaaaaa', event_id: 'speak-event', status: 'finalized' }));
+  const hook = await renderHook(useSpeak);
+  await act(async () => { await hook.result.current.start(); });
+  expect(deleteSession).toHaveBeenCalledWith(expect.objectContaining({ id: 'ses_aaaaaaaaaaaaaaaaaaaaaaaa' }));
+  expect(useRecordingStore.getState().start).toHaveBeenCalled();
+});
+test('retention failure reports a notice and still allows a new recording', async () => {
+  useSettingsStore.setState({ keepTranscripts: false, speakEventIds: { owner: 'speak-event' } });
+  await repo.putSession(session({ id: 'ses_aaaaaaaaaaaaaaaaaaaaaaaa', event_id: 'speak-event', status: 'finalized' }));
+  jest.mocked(deleteSession).mockRejectedValueOnce(new Error('busy'));
+  const hook = await renderHook(useSpeak);
+  await act(async () => { await hook.result.current.start(); });
+  expect(hook.result.current.retentionNotice).toBeTruthy(); expect(hook.result.current.state).toBe('listening');
+});
 test('shows starting and stopping while native promises are pending', async () => {
   let release!: () => void;
   const original = useRecordingStore.getState().start;

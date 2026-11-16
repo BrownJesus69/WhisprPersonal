@@ -2,19 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '@/state/authStore';
 import { useSettingsStore } from '@/state/settingsStore';
 import { useConnectionStore } from '@/state/connectionStore';
-import { createEvent, getEvent, updateEventStatus } from '@/lib/firebase/events';
+import { updateEventStatus } from '@/lib/firebase/events';
 import { repositories, type LocalSession, type TranscriptRow } from '@/lib/db/repositories';
 import { createLocalSession, useRecordingStore } from '@/lib/session/recordingStore';
 import { emptyView, useTranscriptStore } from '@/lib/live/transcriptStore';
 import { liveController } from '@/lib/live/liveController';
 import { uploadService } from '@/lib/upload/uploadService';
 import { aiRuntime } from '@/lib/ai/runtime';
-import { authedClient } from '@/lib/server/authedClient';
-import { deleteSession } from '@/lib/session/deleteSession';
-import { deleteAudio, listChunkFiles, removeParts } from '@/lib/audio/chunkFiles';
 import { kv } from '@/lib/storage/kv';
 import { t } from '@/i18n';
-import type { EventModel } from '@/types/models';
+import { ensureSpeakEvent } from './speakEvent';
+import { applySpeakRetention, removeRecording } from './retention';
+import { draftKey } from './drafts';
+import { requestDefaultCleanup } from './defaultCleanup';
+export { draftKey } from './drafts';
 
 export type SpeakState = 'idle' | 'starting' | 'permission_denied' | 'listening' | 'stopping' | 'processing' | 'slow' | 'complete' | 'failed';
 export function sessionState(session: LocalSession, phase: string | undefined, stale: boolean): SpeakState {
@@ -26,10 +27,10 @@ export function sessionState(session: LocalSession, phase: string | undefined, s
   if (!session.consent_at) return 'idle';
   return stale ? 'slow' : 'processing';
 }
-export const draftKey = (owner: string, id: string, cleaned = false) => `speak.draft.${owner}.${id}.${cleaned ? 'cleaned' : 'original'}`;
 export function useSpeak() {
   const uid = useAuthStore(s => s.user?.uid);
   const connection = useConnectionStore(s => s.status);
+  const cleanupLevel = useSettingsStore(s => s.cleanupLevel);
   const recording = useRecordingStore();
   const [state, setState] = useState<SpeakState>('idle');
   const [session, setSession] = useState<LocalSession | null>(null);
@@ -38,6 +39,10 @@ export function useSpeak() {
   const [cleaned, setCleaned] = useState(false);
   const [error, setError] = useState('');
   const [draftError, setDraftError] = useState(false);
+  const [retentionNotice, setRetentionNotice] = useState('');
+  const [cleanupNotice, setCleanupNotice] = useState('');
+  const cleanupAttempts = useRef(new Set<string>());
+  const cleanupSelected = useRef(new Set<string>());
   const latest = useRef<LocalSession | null>(null), busy = useRef(false);
   const retryAction = useRef<(() => Promise<void>) | null>(null);
   const lastChange = useRef(0), signature = useRef('');
@@ -98,6 +103,9 @@ export function useSpeak() {
         if (disposed || !current || current.owner_uid !== uid || latest.current?.id !== sessionId) return;
         const next = JSON.stringify(stored.map(r => [r.sequence, r.raw_text, r.polished_text]));
         if (signature.current !== next) { signature.current = next; lastChange.current = Date.now(); setRows(stored); }
+        if (stored.some(row => !!row.polished_text) && useSettingsStore.getState().cleanupLevel !== 'none' && !cleanupSelected.current.has(current.id)) {
+          cleanupSelected.current.add(current.id); setCleaned(true);
+        }
         latest.current = current; setSession(current);
         const r = useRecordingStore.getState();
         setState(old => (old === 'failed' || busy.current && ['starting','stopping'].includes(old) || !current.consent_at && old === 'permission_denied') ? old : sessionState(current, r.sessionId === current.id ? r.phase : undefined, Date.now() - lastChange.current >= 60000));
@@ -113,6 +121,14 @@ export function useSpeak() {
   }), []);
   const raw = rows.map(r => r.raw_text).join(' ');
   const polished = rows.map(r => r.polished_text ?? r.raw_text).join(' ');
+  useEffect(() => {
+    if (state !== 'complete' || !sessionId || !uid || cleanupLevel === 'none') return;
+    if (cleanupAttempts.current.has(sessionId)) return;
+    cleanupAttempts.current.add(sessionId);
+    void requestDefaultCleanup(uid, sessionId, cleanupLevel).then(result => {
+      if (latest.current?.id === sessionId) setCleanupNotice(result === 'not_configured' ? t('notSetUpComputer') : '');
+    }).catch(() => { if (latest.current?.id === sessionId) setCleanupNotice(t('cleanupFailed')); });
+  }, [state, sessionId, uid, cleanupLevel]);
   useEffect(() => {
     if (state !== 'complete' || !sessionId || !uid) return;
     let disposed = false;
@@ -130,17 +146,13 @@ export function useSpeak() {
     if (!uid) return;
     const active = useRecordingStore.getState();
     if (active.sessionId && ['recording','paused','stopping','error','requesting_permission'].includes(active.phase)) { setError(t('otherRecording')); setState('failed'); return; }
-    await flushDraft(); setState('starting'); setCleaned(false);
+    await flushDraft(); setState('starting'); setCleaned(false); setCleanupNotice('');
     const settings = useSettingsStore.getState();
-    const eventId = settings.speakEventIds[uid] || (settings.speakEventOwner === uid ? settings.speakEventId : '');
-    let event = eventId ? await getEvent(eventId, uid) : null;
-    if (!event) {
-      const input = { title: t('speak'), description: '', location: '', startTime: null, endTime: null, agenda: '', speakers: [], languages: [], languageMode: 'auto' as const, privacyMode: settings.privacyMode };
-      const id = await createEvent(uid, input, () => { setError(t('failed')); });
-      settings.set({ speakEventId: id, speakEventOwner: uid, speakEventIds: { ...settings.speakEventIds, [uid]: id } });
-      event = { ...input, id, ownerId: uid, status: 'draft', createdAt: null, updatedAt: null, consentVersion: '' } satisfies EventModel;
-    }
-    if (event) useSettingsStore.getState().set({ speakEventId: event.id, speakEventOwner: uid });
+    try {
+      const result = await applySpeakRetention(uid, 'start');
+      setRetentionNotice(result.failed ? t('retentionFailed') : result.pending ? t('deletePending') : '');
+    } catch { setRetentionNotice(t('retentionFailed')); }
+    const event = await ensureSpeakEvent(uid, () => setError(t('failed')));
     const current = await createLocalSession({ ...event, languageMode: settings.defaultLanguageMode });
     latest.current = current; setSession(current); setRows([]); setDraft(''); signature.current = ''; lastChange.current = Date.now();
     await useRecordingStore.getState().start(current, t('speak'), true);
@@ -170,10 +182,8 @@ export function useSpeak() {
     if (useRecordingStore.getState().sessionId === current.id) await useRecordingStore.getState().stop();
     await uploadService.stop(); await aiRuntime.stop(); liveController.stopRuntime();
     try {
-      const r = useRecordingStore.getState();
-      await deleteSession({ repo: await repositories(), client: authedClient(uid), owner: uid, id: current.id, activeId: r.sessionId, phase: r.phase, removeFile: deleteAudio,
-        removeOrphans: id => { for (const file of listChunkFiles(id)) file.delete(); removeParts(id); } });
-      await kv.removeItem(draftKey(uid, current.id)); await kv.removeItem(draftKey(uid, current.id, true));
+      const result = await removeRecording(uid, current.id);
+      setRetentionNotice(result.pending ? t('deletePending') : '');
       latest.current = null; setSession(null); setRows([]); setDraft(''); setState('idle');
     } finally {
       liveController.startRuntime();
@@ -182,6 +192,6 @@ export function useSpeak() {
   });
   const changeCleaned = async (value: boolean) => { try { await flushDraft(); setCleaned(value); } catch { setDraftError(true); } };
   const retry = () => retryAction.current ? run(retryAction.current) : start();
-  return { retry, state, disconnected, session, rows, draft, editDraft, cleaned, changeCleaned, error, draftError, flushDraft, start, stop, finish, remove,
+  return { retry, state, disconnected, session, rows, draft, editDraft, cleaned, changeCleaned, error, draftError, retentionNotice, cleanupNotice, flushDraft, start, stop, finish, remove,
     interrupted: session?.finalize_status === 'interrupted', recording, live, raw };
 }

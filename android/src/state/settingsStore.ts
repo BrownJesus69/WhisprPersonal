@@ -4,6 +4,8 @@ import { kv } from '@/lib/storage/kv';
 import type { LanguageMode, PrivacyMode } from '@/types/models';
 
 export interface Settings {
+  onboarding: 'pending' | 'done';
+  keepTranscripts: boolean;
   appearance: 'system' | 'light' | 'dark';
   recentLanguages: LanguageMode[];
   speakEventIds: Record<string, string>;
@@ -20,6 +22,7 @@ export interface Settings {
 }
 
 export const defaults: Settings = {
+  onboarding: 'pending', keepTranscripts: true,
   appearance: 'system', recentLanguages: [], speakEventIds: {}, speakEventId: '', speakEventOwner: '',
   serverUrl: '',
   defaultLanguageMode: 'auto',
@@ -34,6 +37,8 @@ export const defaults: Settings = {
 export function normalizeSettings(value: Partial<Settings>): Settings {
   const s = { ...defaults, ...value };
   return {
+    onboarding: value.onboarding === 'done' || value.onboarding !== 'pending' && typeof value.serverUrl === 'string' && !!value.serverUrl.trim() ? 'done' : 'pending',
+    keepTranscripts: s.keepTranscripts !== false,
     appearance: ['system', 'light', 'dark'].includes(s.appearance) ? s.appearance : 'system',
     recentLanguages: Array.isArray(s.recentLanguages) ? [...new Set(s.recentLanguages.filter(l => ['auto','kn','ta','hi','en'].includes(l)))].slice(0, 3) : [],
     speakEventIds: s.speakEventIds && typeof s.speakEventIds === 'object' && !Array.isArray(s.speakEventIds) ? Object.fromEntries(Object.entries(s.speakEventIds).filter(([, id]) => typeof id === 'string')) : {},

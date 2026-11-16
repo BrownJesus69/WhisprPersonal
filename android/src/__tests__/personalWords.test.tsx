@@ -1,0 +1,35 @@
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { router } from 'expo-router';
+import PersonalWords from '@/app/personal-words';
+import { ensureSpeakEvent } from '@/features/speak/speakEvent';
+import { VocabularyAPI } from '@/lib/server/vocabulary';
+import { useAuthStore } from '@/state/authStore';
+import { useConnectionStore } from '@/state/connectionStore';
+import { t } from '@/i18n';
+jest.mock('@/features/speak/speakEvent', () => ({ ensureSpeakEvent: jest.fn(async () => ({ id: 'speak-event' })) }));
+jest.mock('@/lib/server/authedClient', () => ({ authedClient: () => null }));
+beforeEach(() => { useAuthStore.getState().setUser({ uid: 'owner', email: null, provider: 'password' }); });
+test('personal words add, remove and save validated terms on the Speak event', async () => {
+  useConnectionStore.setState({ status: 'connected' });
+  const load = jest.spyOn(VocabularyAPI.prototype, 'load').mockResolvedValue({ terms: ['Old'] });
+  const save = jest.spyOn(VocabularyAPI.prototype, 'save').mockResolvedValue({});
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const v = await render(<QueryClientProvider client={client}><PersonalWords /></QueryClientProvider>);
+  await v.findByText('Old');
+  await fireEvent.changeText(v.getByLabelText(t('addWord')), '  Aditya  '); await fireEvent.press(v.getByLabelText(t('add')));
+  await fireEvent.changeText(v.getByLabelText(t('addWord')), 'Aditya'); await fireEvent.press(v.getByLabelText(t('add')));
+  expect(v.getAllByText('Aditya')).toHaveLength(1);
+  await fireEvent.press(v.getAllByLabelText(t('remove'))[0]);
+  await fireEvent.press(v.getByLabelText(t('save')));
+  await waitFor(() => expect(save).toHaveBeenCalledWith('speak-event', ['Aditya']));
+  expect(ensureSpeakEvent).toHaveBeenCalledWith('owner'); expect(v.getByText(t('wordsSaved'))).toBeTruthy();
+  await v.unmount(); client.clear(); load.mockRestore(); save.mockRestore();
+});
+test('disconnected notice offers Connect computer without loading the list', async () => {
+  useConnectionStore.setState({ status: 'disconnected' });
+  const client = new QueryClient(); const v = await render(<QueryClientProvider client={client}><PersonalWords /></QueryClientProvider>);
+  expect(v.getByText(t('personalWordsOffline'))).toBeTruthy(); expect(ensureSpeakEvent).not.toHaveBeenCalled();
+  await fireEvent.press(v.getByLabelText(t('connect'))); expect(router.push).toHaveBeenCalledWith('/connect');
+  await v.unmount(); client.clear();
+});

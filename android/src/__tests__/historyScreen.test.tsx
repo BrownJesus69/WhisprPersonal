@@ -9,6 +9,10 @@ import { useAuthStore } from '@/state/authStore';
 import { session } from './recordingFixtures';
 import { finalData } from './liveFixtures';
 import { t } from '@/i18n';
+import { defaults, useSettingsStore } from '@/state/settingsStore';
+import { kv } from '@/lib/storage/kv';
+import { draftKey } from '@/features/speak/drafts';
+import * as eventsAPI from '@/lib/firebase/events';
 jest.mock('@/lib/db/repositories', () => ({ ...jest.requireActual('@/lib/db/repositories'), repositories: jest.fn() }));
 test('renders newest-first date groups, searches previews, copies on tap and links Events', async () => {
   jest.useFakeTimers(); jest.setSystemTime(new Date(2026,10,16,12));
@@ -26,7 +30,34 @@ test('renders newest-first date groups, searches previews, copies on tap and lin
   await fireEvent.press(view.getAllByRole('button', { name: t('copy') })[0]); expect(Clipboard.setStringAsync).toHaveBeenCalledWith('today words');
   await fireEvent.changeText(view.getByLabelText(t('searchHistory')), 'yesterday');
   expect(view.queryByText('today words')).toBeNull(); expect(view.getByText('yesterday words')).toBeTruthy();
-  await fireEvent.press(view.getByText('yesterday words')); expect(router.push).toHaveBeenCalledWith({ pathname: '/transcript/[sessionId]', params: { sessionId: 'yesterday' } });
+  await fireEvent.press(view.getByText('yesterday words')); expect(router.push).toHaveBeenCalledWith({ pathname: '/history/[sessionId]', params: { sessionId: 'yesterday' } });
   await fireEvent.press(view.getByRole('button', { name: t('eventsLink') })); expect(router.push).toHaveBeenCalledWith('/events');
   await view.unmount(); client.clear(); jest.useRealTimers();
+});
+test('empty History offers Start speaking and explains retention when off', async () => {
+  jest.mocked(repositories).mockResolvedValue(new MemoryRepositories());
+  useAuthStore.getState().setUser({ uid: 'owner', email: null, provider: 'password' });
+  useSettingsStore.setState({ ...defaults, keepTranscripts: false });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const v = await render(<QueryClientProvider client={client}><History /></QueryClientProvider>);
+  await v.findByText(t('emptyHistory')); expect(v.getByText(t('retentionHelp'))).toBeTruthy();
+  await fireEvent.press(v.getByLabelText(t('start'))); expect(router.push).toHaveBeenCalledWith('/');
+  await v.unmount(); client.clear();
+});
+test('event rows show their titles; Speak rows omit them; row Copy uses saved edits', async () => {
+  const repo = new MemoryRepositories(); jest.mocked(repositories).mockResolvedValue(repo);
+  useAuthStore.getState().setUser({ uid: 'owner', email: null, provider: 'password' });
+  useSettingsStore.setState({ ...defaults, speakEventIds: { owner: 'speak-event' } });
+  const get = jest.spyOn(eventsAPI, 'getEvent').mockResolvedValue({ title: 'Team meeting' } as never);
+  await repo.putSession(session({ id: 'history-speak', event_id: 'speak-event', status: 'finalized' }));
+  await repo.upsertTranscript(transcriptRow('history-speak', finalData({ raw_text: 'Speak words' })));
+  await repo.putSession(session({ id: 'history-event', event_id: 'event-1', status: 'finalized' }));
+  await repo.upsertTranscript(transcriptRow('history-event', finalData({ raw_text: 'Meeting words' })));
+  await kv.setItem(draftKey('owner', 'history-speak'), 'Edited Speak words');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const v = await render(<QueryClientProvider client={client}><History /></QueryClientProvider>);
+  await v.findByText('Event: Team meeting'); expect(v.queryAllByText(/^Event:/)).toHaveLength(1);
+  expect(v.getByText('Edited Speak words')).toBeTruthy();
+  await fireEvent.press(v.getAllByLabelText(t('copy'))[1]); expect(Clipboard.setStringAsync).toHaveBeenCalledWith('Edited Speak words');
+  await v.unmount(); client.clear(); get.mockRestore(); await kv.removeItem(draftKey('owner', 'history-speak'));
 });

@@ -48,7 +48,7 @@ test('Connect asks for the server key after reaching the laptop', async () => {
   mockFetch().mockResolvedValue(response(health));
   const view = await connect();
   await fireEvent.press(view.getByText('Connect'));
-  await view.findByText('Enter the server key shown on the laptop.');
+  await view.findAllByText(/Enter the server key shown on the laptop\./);
   expect(useSettingsStore.getState().serverUrl).toBe('http://192.168.1.20:8000');
   expect(useConnectionStore.getState().status).toBe('error');
 });
@@ -80,7 +80,7 @@ test('one tap verifies sign-in, obtains a pass with a Firebase token, and saves'
 test('scanned URL replaces the address', async () => {
   const view=await connect();
   await act(async()=>useConnectionStore.getState().set({scannedUrl:'http://100.64.0.1:8000'}));
-  expect(view.getByLabelText('Laptop address')).toHaveDisplayValue('http://100.64.0.1:8000');
+  expect(view.getByLabelText('Computer address')).toHaveDisplayValue('http://100.64.0.1:8000');
 });
 
 test('Connect disables retries for Retry-After', async () => {
