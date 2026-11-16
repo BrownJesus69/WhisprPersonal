@@ -99,8 +99,17 @@ if ($addresses.Count -gt 0) {
     $lanUrl = "http://$($addresses[0].IPAddress):$port"
     & docker compose @composeFiles exec -T server python -m app.cli qr $lanUrl
 }
-if (Get-Command tailscale -ErrorAction SilentlyContinue) {
-    $tailscaleIp = @(& cmd.exe /d /c "tailscale ip -4 2>nul")
+$tailscaleExe = (Get-Command tailscale -ErrorAction SilentlyContinue).Source
+if (-not $tailscaleExe) {
+    # Not on PATH (e.g. installed to another drive): find it next to the Tailscale service.
+    $service = Get-CimInstance Win32_Service -Filter "Name='Tailscale'" -ErrorAction SilentlyContinue
+    if ($service -and $service.PathName -match '^"?(.+\\)tailscaled\.exe') {
+        $candidate = Join-Path $Matches[1] 'tailscale.exe'
+        if (Test-Path -LiteralPath $candidate) { $tailscaleExe = $candidate }
+    }
+}
+if ($tailscaleExe) {
+    $tailscaleIp = @(& cmd.exe /d /c "`"$tailscaleExe`" ip -4 2>nul")
     if ($LASTEXITCODE -eq 0 -and $tailscaleIp.Count -gt 0 -and $tailscaleIp[0]) {
         # Works at home and away; scan this one to use the app outside. See docs/remote-access.md.
         $tailscaleUrl = "http://$($tailscaleIp[0].Trim()):$port"

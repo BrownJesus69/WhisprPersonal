@@ -15,8 +15,12 @@ function Fail([string]$text) { Write-Host "[FAIL] $text" -ForegroundColor Red; $
 $tailscaleUrl = $null
 $tailscale = Get-Command tailscale -ErrorAction SilentlyContinue
 if (-not $tailscale) {
-    $candidate = Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'
-    if (Test-Path -LiteralPath $candidate) { $tailscale = Get-Item -LiteralPath $candidate }
+    # Not on PATH (e.g. installed to another drive): find it next to the Tailscale service.
+    $service = Get-CimInstance Win32_Service -Filter "Name='Tailscale'" -ErrorAction SilentlyContinue
+    if ($service -and $service.PathName -match '^"?(.+\\)tailscaled\.exe') {
+        $candidate = Join-Path $Matches[1] 'tailscale.exe'
+        if (Test-Path -LiteralPath $candidate) { $tailscale = Get-Item -LiteralPath $candidate }
+    }
 }
 if (-not $tailscale) {
     Fail 'Tailscale is not installed. Get it from https://tailscale.com/download and sign in.'
