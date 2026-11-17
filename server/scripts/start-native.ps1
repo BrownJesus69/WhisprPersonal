@@ -31,13 +31,18 @@ $env:PYTHONUTF8 = '1'
 $logDir = if ($DataDir) { Join-Path $DataDir 'logs' } else { Join-Path (Get-Location) 'data\logs' }
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir 'server-native.log'
+# Logging must never stop the server: if another program holds the log open, use a fallback file.
+function Test-Writable([string]$path) {
+    try { $stream = [IO.File]::Open($path, 'Append', 'Write', 'ReadWrite'); $stream.Close(); return $true } catch { return $false }
+}
+if (-not (Test-Writable $log)) { $log = Join-Path $logDir ("server-native-{0}.log" -f $PID) }
 function Write-Log([string]$text) {
-    Add-Content -LiteralPath $log -Encoding utf8 -Value ("{0} {1}" -f (Get-Date -Format o), $text)
+    try { Add-Content -LiteralPath $log -Encoding utf8 -Value ("{0} {1}" -f (Get-Date -Format o), $text) -ErrorAction Stop } catch { }
 }
 
 do {
     if ((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -gt 20MB) {
-        Move-Item -Force -LiteralPath $log -Destination "$log.1"
+        try { Move-Item -Force -LiteralPath $log -Destination "$log.1" -ErrorAction Stop } catch { }
     }
     Write-Log "starting server on ${BindHost}:$Port"
     # cmd handles the redirection so native stderr never becomes a PowerShell error record.
