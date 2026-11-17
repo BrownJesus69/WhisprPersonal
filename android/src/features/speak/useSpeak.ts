@@ -53,7 +53,7 @@ export function useSpeak() {
   const draftWrites = useRef<Promise<void>>(Promise.resolve());
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const live = useTranscriptStore(s => session ? s.sessions[session.id] ?? emptyView : emptyView);
-  const disconnected = !['connected','verified'].includes(connection) || ['offline','auth_required','not_allowed','reconnecting'].includes(live.status) && !!session;
+  const disconnected = !['connected','verified'].includes(connection) || ['offline','auth_required','not_allowed'].includes(live.status) && !!session;
   const flushDraft = useCallback(async () => {
     if (draftTimer.current) clearTimeout(draftTimer.current);
     const pending = edit.current;

@@ -101,9 +101,17 @@ function sync(refresh = false) {
   if (r.sessionId && recordingActive(r.sessionId) && !entries.has(r.sessionId)) entries.set(r.sessionId, { refs: 0 });
   for (const [id,e] of entries) void reconcile(id, e, refresh);
 }
+let restartTimer: ReturnType<typeof setTimeout> | undefined;
+/**
+ * Old streams stop at once (their credentials may be stale), but reconnecting waits briefly so a
+ * burst of changes opens one stream, not several. One Connect tap changes the server key, the auth
+ * check and the offline pass in quick succession; each used to reconnect, opening three sockets.
+ */
+export const RESTART_COALESCE_MS = 300;
 function restart() {
   for (const e of entries.values()) { e.generation = (e.generation ?? 0) + 1; e.client?.stop(); e.client = undefined; e.synced = false; e.override = undefined; }
-  sync();
+  if (restartTimer) clearTimeout(restartTimer);
+  restartTimer = setTimeout(() => { restartTimer = undefined; if (runtime) sync(); }, RESTART_COALESCE_MS);
 }
 export const liveController = {
   startRuntime() {
@@ -124,7 +132,7 @@ export const liveController = {
     cleanup = () => { recording(); settings(); account(); credential(); connection(); upload(); app.remove(); network.remove(); };
     sync();
   },
-  stopRuntime() { cleanup?.(); cleanup = undefined; runtime = false; for (const e of entries.values()) e.client?.stop(); entries.clear(); },
+  stopRuntime() { cleanup?.(); cleanup = undefined; runtime = false; if (restartTimer) { clearTimeout(restartTimer); restartTimer = undefined; } for (const e of entries.values()) e.client?.stop(); entries.clear(); },
   acquire(id: string) {
     const e = entries.get(id) ?? { refs: 0 }; e.refs++; entries.set(id, e); void reconcile(id, e);
     return () => { e.refs = Math.max(0, e.refs - 1); void reconcile(id, e); };

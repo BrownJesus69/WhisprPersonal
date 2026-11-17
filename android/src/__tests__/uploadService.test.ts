@@ -17,11 +17,13 @@ async function setup(count = 2, stopped = false) {
     get: jest.fn(async () => ({ status: 'active', chunks: [] })) };
   let now = 100000;
   let retain = true;
+  const missing = new Set<string>();
   const removeFile = jest.fn(); const connection = jest.fn(); const eventStatus = jest.fn();
   const worker = new UploadService({ repo, owner: 'owner', client: client as unknown as ServerClient, now: () => now,
-    random: () => 1, deleteAfter: () => !retain, removeFile, connection, eventStatus });
+    random: () => 1, deleteAfter: () => !retain, removeFile, connection, eventStatus,
+    audio: (uri: string) => ({ exists: !missing.has(uri), uri, name: uri.split('/').pop(), type: 'audio/wav', bytes: async () => new Uint8Array(44) }) });
   workers.push(worker);
-  return { repo, client, worker, removeFile, connection, eventStatus, advance: (ms: number) => { now += ms; }, deleteAfter: () => { retain = false; } };
+  return { repo, client, worker, removeFile, connection, eventStatus, advance: (ms: number) => { now += ms; }, deleteAfter: () => { retain = false; }, missing };
 }
 test('creates session once, uploads in sequence; duplicate succeeds', async () => {
   const t = await setup();
@@ -164,4 +166,40 @@ test('stale HTTP snapshot cannot replace a newer WebSocket revision', async () =
     return { status: 'active', chunks: [{ ...finalData(), status: 'done' }] } as never;
   });
   await t.worker.tick(); expect((await t.repo.transcript(session().id))[0].raw_text).toBe('new revision'); await t.worker.stop();
+});
+
+describe('computer status after upload failures', () => {
+  test('the chunk is sent as a file object (expo/fetch rejects React Native uri parts)', async () => {
+    // Node's FormData stringifies objects, unlike Expo's patched one on the phone, so capture
+    // exactly what the app appends.
+    const appended: [string, unknown][] = [];
+    const append = jest.spyOn(FormData.prototype, 'append').mockImplementation(function (name: string, value: unknown) { appended.push([name, value]); });
+    const t = await setup(1);
+    await t.worker.tick();
+    append.mockRestore();
+    const part = appended.find(([name]) => name === 'file')![1] as { uri?: string; bytes?: unknown; name?: string };
+    expect(typeof part.bytes).toBe('function');
+    expect(part.name).toMatch(/\.wav$/);
+  });
+  test('a phone-side failure leaves the computer status alone', async () => {
+    const t = await setup(1);
+    t.client.postMultipart.mockRejectedValueOnce(new Error('Unsupported FormDataPart implementation'));
+    await t.worker.tick();
+    expect(t.connection).not.toHaveBeenCalledWith('disconnected');
+    expect((await t.repo.chunks(session().id))[0]).toMatchObject({ status: 'pending', last_error: 'upload_failed: Unsupported FormDataPart implementation' });
+  });
+  test('an unreachable computer is reported as disconnected', async () => {
+    const t = await setup(1);
+    t.client.postMultipart.mockRejectedValueOnce(new ServerError(0, 'network_unreachable', "Can't reach the laptop"));
+    await t.worker.tick();
+    expect(t.connection).toHaveBeenCalledWith('disconnected');
+  });
+  test('missing audio fails that chunk only, without a request or a status change', async () => {
+    const t = await setup(1);
+    t.missing.add(chunk(0).uri);
+    await t.worker.tick();
+    expect(t.client.postMultipart).not.toHaveBeenCalled();
+    expect(t.connection).not.toHaveBeenCalledWith('disconnected');
+    expect((await t.repo.chunks(session().id))[0]).toMatchObject({ status: 'failed_permanent', last_error: 'audio_missing' });
+  });
 });

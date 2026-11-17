@@ -14,6 +14,8 @@ import { useSettingsStore } from '@/state/settingsStore';
 import { useConnectionStore } from '@/state/connectionStore';
 import { useAuthStore } from '@/state/authStore';
 import { backoff } from './backoff';
+import { File } from 'expo-file-system';
+import { safeReason } from '@/lib/errors/safeReason';
 
 const authCodes = new Set(['missing_server_key','invalid_server_key','server_not_configured','account_not_allowed','auth_not_configured','renew_required','auth_token_expired','invalid_token','unauthorized']);
 const listeners = new Set<(sessionId: string) => void>();
@@ -43,6 +45,18 @@ interface Dependencies {
   removeFile: (uri: string) => void | Promise<void>;
   connection: (status: 'connected' | 'error' | 'renew_required' | 'disconnected') => void;
   eventStatus: (id: string, status: 'completed') => void;
+  /**
+   * The chunk's audio as a multipart part. Expo SDK 58 installs expo/fetch as the global fetch,
+   * and its FormData encoder rejects React Native's `{ uri, name, type }` parts ("Unsupported
+   * FormDataPart implementation") before any byte is sent; an expo-file-system File (which has
+   * name, type and bytes()) is supported. Injectable for tests.
+   */
+  audio?: (uri: string) => { exists: boolean };
+}
+
+/** Only a failure to reach the computer means it is disconnected; other failures are ours. */
+function unreachable(error: unknown) {
+  return error instanceof ServerError && error.status === 0 && ['network_unreachable', 'timeout'].includes(error.code);
 }
 
 /** One worker owns a single request lane. All upload progress lives in SQLite. */
@@ -72,7 +86,8 @@ export class UploadService {
     this.busy = true;
     let pending = true;
     try { pending = await this.tick(); }
-    catch { this.d.connection('error'); }
+    // A local failure (database, files) says nothing about the computer: keep its status.
+    catch (e) { console.warn('[whispr] upload pass', safeReason('upload_pass_failed', e)); }
     finally {
       this.busy = false;
       if (this.rerun && this.running && !this.paused) { this.rerun = false; this.notify(); }
@@ -108,7 +123,12 @@ export class UploadService {
       if (language) form.append('language', language);
       for (const [key, value] of Object.entries({ chunk_id: c.chunk_id, sequence: c.sequence, start_ms: c.start_ms,
         end_ms: c.end_ms, overlap_ms: c.overlap_ms, continues: !!c.continues, sha256: c.sha256 })) form.append(key, String(value));
-      form.append('file', { uri: c.uri, name: c.uri.split('/').pop()!, type: 'audio/wav' } as unknown as Blob);
+      const audio = (this.d.audio ?? (uri => new File(uri)))(c.uri);
+      if (!audio.exists) {
+        await repo.updateChunk(c.chunk_id, { status: 'failed_permanent', last_error: 'audio_missing' });
+        return;
+      }
+      form.append('file', audio as unknown as Blob);
       let response: ChunkUploadResponse;
       try { response = await client.postMultipart<ChunkUploadResponse>(`${this.path(s)}/chunks`, form, { timeoutMs: 60000 }); }
       catch (e) {
@@ -121,13 +141,14 @@ export class UploadService {
       await repo.updateChunk(c.chunk_id, { status: 'uploaded', server_status: response.status, last_error: null, next_attempt_at: 0 });
       if (!this.cancelled) this.d.connection('connected');
     } catch (e) {
-      const code = e instanceof ServerError ? e.code : 'upload_unavailable';
+      const code = e instanceof ServerError ? e.code : safeReason('upload_failed', e);
+      if (!(e instanceof ServerError)) console.warn('[whispr] upload', code);
       if (this.pause(e)) { await repo.updateChunk(c.chunk_id, { status: 'pending', last_error: code }); return; }
       if (outcome(e) === 'permanent') await repo.updateChunk(c.chunk_id, { status: 'failed_permanent', last_error: code });
       else {
         await repo.updateChunk(c.chunk_id, { status: 'pending', attempts: c.attempts + 1, last_error: code,
           next_attempt_at: this.now() + backoff(c.attempts + 1, e instanceof ServerError ? e.retryAfterS : undefined, this.d.random) });
-        this.d.connection('disconnected');
+        if (unreachable(e)) this.d.connection('disconnected');
       }
     }
   }
@@ -197,10 +218,10 @@ export class UploadService {
         }
       } catch (e) {
         if (this.pause(e)) break;
-        const code = e instanceof ServerError ? e.code : 'status_unavailable';
+        const code = e instanceof ServerError ? e.code : safeReason('status_unavailable', e);
         await this.d.repo.updateSession(s.id, { last_error: code });
         this.sessionRetry.set(s.id, this.now() + backoff(4, e instanceof ServerError ? e.retryAfterS : undefined, this.d.random));
-        this.d.connection('disconnected');
+        if (unreachable(e)) this.d.connection('disconnected');
       }
     }
     all = (await Promise.all(sessions.map(s => this.d.repo.chunks(s.id)))).flat();

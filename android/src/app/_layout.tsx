@@ -16,6 +16,7 @@ import { recorderAdapter } from '@/lib/audio/recorder';
 import { attachRecorder, useRecordingStore } from '@/lib/session/recordingStore';
 import { repositories } from '@/lib/db/repositories';
 import { recoverSessions } from '@/lib/session/recovery';
+import { startConnectionMonitor } from '@/lib/server/connectionMonitor';
 import { noteSync } from '@/lib/notes/noteSync';
 import { uploadService } from '@/lib/upload/uploadService';
 import { liveController } from '@/lib/live/liveController';
@@ -82,6 +83,8 @@ function RecordingRuntime() {
     });
     return () => { disposed = true; };
   }, [uid, user]);
+  // Keep the computer status truthful from launch, independent of uploads and recovery.
+  useEffect(() => { if (uid && url) return startConnectionMonitor(uid); }, [uid, url]);
   useEffect(() => {
     let disposed = false;
     if (uid && recoveredOwner === user && url) void uploadService.start(uid).catch(error => { console.warn('[whispr] upload start', String(error)); if (!disposed) setRecoveryError(t('uploadStartFailed')); });

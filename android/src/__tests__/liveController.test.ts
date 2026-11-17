@@ -1,4 +1,5 @@
-import { liveController } from '../lib/live/liveController';
+import { useConnectionStore } from '@/state/connectionStore';
+import { liveController, RESTART_COALESCE_MS } from '../lib/live/liveController';
 import { MemoryRepositories } from '../lib/db/memoryRepositories';
 import * as repoModule from '../lib/db/repositories';
 import * as socketModule from '../lib/live/socket';
@@ -41,7 +42,18 @@ test('local-only session waits and starts once server_created changes; credentia
   const t = await setup(0); const release = liveController.acquire(liveId); await flush(); expect(t.sockets).toHaveLength(0);
   await t.repo.updateSession(liveId, { server_created: 1 });
   useRecordingStore.setState({ sessionId: liveId, phase: 'recording' }); await flush(); expect(t.sockets).toHaveLength(1);
-  await credentials.setServerKey('new-test-key'); await flush(); expect(t.sockets).toHaveLength(2); expect(t.sockets[0].readyState).toBe(3);
+  await credentials.setServerKey('new-test-key'); await flush(); expect(t.sockets[0].readyState).toBe(3);
+  await jest.advanceTimersByTimeAsync(RESTART_COALESCE_MS); await flush(); expect(t.sockets).toHaveLength(2);
+  release();
+});
+test('a burst of credential changes (one Connect tap) opens one new stream, not one per change', async () => {
+  const t = await setup(); const release = liveController.acquire(liveId); await flush(); expect(t.sockets).toHaveLength(1);
+  await credentials.setServerKey('key-a');
+  useConnectionStore.getState().set({ check: { uid: 'owner' } as never });
+  useConnectionStore.getState().set({ passExpiry: Date.now() / 1000 + 43200 });
+  await flush(); expect(t.sockets[0].readyState).toBe(3); expect(t.sockets).toHaveLength(1);
+  await jest.advanceTimersByTimeAsync(RESTART_COALESCE_MS); await flush();
+  expect(t.sockets).toHaveLength(2); expect(t.sockets[1].readyState).not.toBe(3);
   release();
 });
 test('screen release during async initialization cannot leak socket/listeners', async () => {
