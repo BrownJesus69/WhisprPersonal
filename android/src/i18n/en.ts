@@ -152,5 +152,6 @@ export const en = {
   recoveryPartial: '{count} recording(s) could not be recovered automatically; their audio files are kept. Other recordings are uploading normally. Reason: {reason}',
   recoveryFailed: 'Recovering unfinished recordings did not finish. Saved audio files are kept. Reopen the app to try again.',
   uploadStartFailed: 'Uploading to your computer could not start. Your recordings are safe on this phone. Reopen the app to try again.',
-  errorDetails: 'Details: {reason}'
+  errorDetails: 'Details: {reason}',
+  processingBackground: 'You can start a new recording now. This one keeps going and will appear in History.'
 } as const;

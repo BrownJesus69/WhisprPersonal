@@ -162,3 +162,26 @@ test('flushes edits on unmount and restores draft when an unfinished session com
   await repo.updateSession(id, { status: 'finalized' }); await tick();
   expect(restored.result.current.draft).toBe('retained edit');
 });
+
+test('a recording deleted while processing returns Speak to ready instead of waiting forever', async () => {
+  const hook = await renderHook(useSpeak);
+  await act(async () => { await hook.result.current.start(); });
+  await act(async () => { await hook.result.current.stop(); });
+  await tick(); expect(hook.result.current.state).toBe('processing');
+  await act(async () => { await repo.deleteSessionRows(id, 'owner', false); }); expect(await repo.session(id)).toBeNull();
+  await tick();
+  expect(hook.result.current.state).toBe('idle');
+  expect(hook.result.current.session).toBeNull();
+});
+
+test('a new recording can start while the previous one is still being processed', async () => {
+  const hook = await renderHook(useSpeak);
+  await act(async () => { await hook.result.current.start(); });
+  await act(async () => { await hook.result.current.stop(); });
+  await tick(); expect(hook.result.current.state).toBe('processing');
+  jest.mocked(createLocalSession).mockImplementationOnce(async event => { const row = session({ id: 'ses_' + 'f'.repeat(24), status: 'paused', consent_at: null, event_id: event.id }); await repo.putSession(row); return row; });
+  await act(async () => { await hook.result.current.start(); });
+  expect(hook.result.current.state).toBe('listening');
+  expect(hook.result.current.session?.id).toBe('ses_' + 'f'.repeat(24));
+  expect(await repo.session(id)).toMatchObject({ status: 'stopped' });
+});

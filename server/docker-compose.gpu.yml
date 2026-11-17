@@ -1,5 +1,8 @@
 services:
   server:
+    environment:
+      WHISPER_DEVICE: cuda
+      WHISPER_COMPUTE_TYPE: float16
     deploy:
       resources:
         reservations:

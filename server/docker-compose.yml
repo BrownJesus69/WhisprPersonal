@@ -6,6 +6,12 @@ services:
     environment:
       MODELS_DIR: /models
       DATA_DIR: /data
+      # CPU by default: on Docker Desktop for Windows (WSL2) every CUDA inference in this image
+      # dies with SIGBUS (exit 135), reproduced 2026-11-17 with float16/float32/int8_float16,
+      # with 64 MB and 2 GB /dev/shm, and with the model on container-local disk. CPU int8
+      # transcribes 10 s of audio in about 4 s. docker-compose.gpu.yml re-enables CUDA.
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
     ports:
       - "${WHISPRPERSONAL_BIND:-0.0.0.0}:${WHISPRPERSONAL_PORT:-8000}:8000"
     volumes:

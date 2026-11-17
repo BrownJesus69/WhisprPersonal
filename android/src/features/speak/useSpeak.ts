@@ -103,7 +103,13 @@ export function useSpeak() {
         const repo = await repositories();
         const current = await repo.session(sessionId);
         const stored = (await repo.transcript(sessionId)).sort((a,b) => a.sequence - b.sequence);
-        if (disposed || !current || current.owner_uid !== uid || latest.current?.id !== sessionId) return;
+        if (disposed || latest.current?.id !== sessionId) return;
+        if (!current) {
+          // Deleted elsewhere (History, retention, another device): never wait on it forever.
+          latest.current = null; signature.current = ''; setSession(null); setRows([]); setDraft(''); setCleanupNotice(''); setState('idle');
+          return;
+        }
+        if (current.owner_uid !== uid) return;
         const next = JSON.stringify(stored.map(r => [r.sequence, r.raw_text, r.polished_text, r.failed_code, r.polish_error]));
         if (signature.current !== next) { signature.current = next; lastChange.current = Date.now(); setRows(stored); }
         if (stored.some(row => !!row.polished_text) && useSettingsStore.getState().cleanupLevel !== 'none' && !cleanupSelected.current.has(current.id)) {

@@ -37,7 +37,9 @@ if (-not (Test-Path -LiteralPath $envPath)) {
 
 New-Item -ItemType Directory -Force -Path 'models', 'data' | Out-Null
 $composeFiles = @('-f', 'docker-compose.yml')
-if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+# GPU inside Docker crashes on Docker Desktop/WSL2 (SIGBUS on the first CUDA inference; see
+# docker-compose.yml), so Docker runs on the CPU unless explicitly opted in.
+if ($env:WHISPRPERSONAL_DOCKER_GPU -eq '1' -and (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) {
     & cmd.exe /d /c "nvidia-smi >nul 2>&1"
     if ($LASTEXITCODE -eq 0) { $composeFiles += @('-f', 'docker-compose.gpu.yml') }
 }

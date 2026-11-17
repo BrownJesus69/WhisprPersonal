@@ -28,6 +28,9 @@ export default function Speak() {
   const [actionError, setActionError] = useState('');
   const listening = s.state === 'listening';
   const processing = ['starting','stopping','processing','slow'].includes(s.state);
+  // Only the brief start/stop transitions block the button; while the computer turns the last
+  // recording into text, a new one can start (the earlier one finishes in History).
+  const transitioning = ['starting','stopping'].includes(s.state);
   const complete = s.state === 'complete' || s.state === 'failed' && !!s.rows.length;
   const time = Math.floor((s.recording.sessionId === s.session?.id ? s.recording.elapsedMs : s.session?.time_ms ?? 0) / 1000);
   const timer = `${Math.floor(time / 60).toString().padStart(2, '0')}:${(time % 60).toString().padStart(2, '0')}`;
@@ -63,12 +66,13 @@ export default function Speak() {
           {[...s.live.model.finals.values()].map(row => <Text key={row.sequence} selectable style={{ ...typography.transcript, color: c.text, fontFamily: fontFor(row.raw_text), lineHeight: lineHeightFor(row.raw_text, 19) }}>{row.raw_text}</Text>)}
           {[...s.live.model.partials].map(([sequence, segments]) => <Text key={sequence} style={{ ...typography.transcript, color: c.muted, fontStyle: 'italic', fontFamily: fontFor(segments.map(v => v.text).join(' ')), lineHeight: lineHeightFor(segments.map(v => v.text).join(' '), 19) }}>{segments.map(v => v.text).join(' ')}</Text>)}
           {!s.live.model.finals.size && !s.live.model.partials.size && <Text style={{ ...typography.transcript, color: c.muted, fontFamily: fontFor(t('support')) }}>{listening && s.live.status !== 'live' ? t('offlineRecording') : processing ? t('processing') : t('support')}</Text>}
+          {(s.state === 'processing' || s.state === 'slow') && <Text style={{ ...typography.body, color: c.muted }}>{t('processingBackground')}</Text>}
         </>}
       </ScrollView>
       <View testID="speak-dock" style={{ gap: 8, paddingVertical: 12, backgroundColor: c.background }}>
         <Text accessibilityLiveRegion="none" importantForAccessibility="no" style={{ ...typography.label, color: listening ? c.record : c.muted, textAlign: 'center', fontVariant: ['tabular-nums'] }}>{listening ? `● ${t('listening', { time: timer })}` : t('computer')}</Text>
         <LevelBars recording={listening && s.recording.phase === 'recording'} />
-        {!complete && <MicButton elapsed={t('listening', { time: timer })} state={listening ? 'listening' : processing ? 'processing' : complete ? 'complete' : 'ready'} onPress={() => act(listening ? s.stop : s.start)} />}
+        {!complete && <MicButton elapsed={t('listening', { time: timer })} state={listening ? 'listening' : transitioning ? 'processing' : 'ready'} onPress={() => act(listening ? s.stop : s.start)} />}
         {complete && <Button secondary label={t('again')} onPress={() => act(s.start)} />}
         {complete && s.session && <TranscriptResult hideEditor key={s.session.id} session={s.session} text={s.draft} edit={s.editDraft} cleaned={s.cleaned} changeCleaned={s.changeCleaned} hasPolished={s.rows.some(r => !!r.polished_text)} flush={s.flushDraft} remove={s.remove} />}
         {listening && <Button secondary label={t('cancel')} onPress={() => Alert.alert(t('cancelTitle'), undefined, [
