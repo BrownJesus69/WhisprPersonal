@@ -25,6 +25,7 @@ both model status is `ready` and queue status is `running`.
 | version | `0.1.0` |
 | server_time, uptime_s | UTC ISO-8601 timestamp and nonnegative elapsed seconds |
 | model | `name`, `fallback_name`, `status` (`not_loaded/loading/ready/error`), `device` (`auto/cuda/cpu`, configured preference) |
+| indic_asr | `{status: ready/not_loaded/not_configured/error, languages: [...], model: "ai4bharat/indic-conformer-600m-multilingual"}`; no local paths |
 | gpu | `available` (boolean/null), `name` (string/null), `vram_total_mb` (integer/null), `detection` (`ctranslate2/nvidia-smi/disabled/unavailable`) |
 | queue | `status` (`not_started/running/stopping`), `depth`, `max_depth`, `workers` |
 | providers | `groq`, `sambanova`, `local_llm`, each `{configured: boolean, status: not_configured/configured_unchecked}` |
@@ -36,6 +37,22 @@ With preload disabled, startup values are `degraded`, `not_loaded`, `running`, a
 unconfigured providers. Default preload loads turbo asynchronously. Configured providers are never contacted here. Names in the model object are
 the configured Whisper names, not a claim that model files exist. No secret or filesystem
 path is returned. Security headers include `nosniff`, `no-referrer`, and `no-store`.
+
+Transcription and keyboard dictation route resolved `kn`, `hi`, and `ta` chunks to local
+AI4Bharat IndicConformer (MIT) when available. English uses Whisper. Auto language
+detection and locking still use Whisper; the resolved language then selects the ASR engine.
+Indic uses RNNT text with CTC word timing for overlap stitching; mismatched word counts
+use character-proportional timing within the CTC speech span. Personal words do not apply
+to Indic-routed chunks. A load/run failure falls back to Whisper for that chunk.
+
+`INDIC_ASR_ENABLED=true` enables this optional path. `INDIC_ASR_LANGUAGES=kn,hi,ta`
+must be a subset of `SUPPORTED_LANGUAGES` (the default intersects those languages).
+`INDIC_ASR_MODEL_DIR` is relative to `MODELS_DIR` unless absolute; its default is
+`models--ai4bharat--indic-conformer-600m-multilingual/snapshots/2a77d305038dfc502fd9464e7d028b90381976cb`.
+No model is downloaded automatically. Health reports `not_loaded` until first use,
+`ready` after inference, `error` on load/run failure, or `not_configured` when disabled,
+dependencies are unavailable, or required files are missing. The Docker image does not
+include torch or the Indic weights and continues using Whisper.
 
 ## GET /api/v1/diagnostics
 

@@ -13,6 +13,7 @@ from app.schemas.health import (
     FirebaseInfo,
     GrantsInfo,
     HealthResponse,
+    IndicASRInfo,
     ModelInfo,
     ProviderInfo,
     ProvidersInfo,
@@ -38,6 +39,10 @@ def build_health(request: Request) -> HealthResponse:
         )
 
     return HealthResponse(
+        indic_asr=IndicASRInfo(
+            status=request.app.state.indic_asr.status,
+            languages=settings.indic_asr_languages,
+        ),
         integrations=integration_status(settings),
         translation=request.app.state.translation_router.status(),
         status="ok"

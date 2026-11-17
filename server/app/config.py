@@ -93,6 +93,19 @@ class Settings(BaseSettings):
         default_factory=lambda: ["kn", "ta", "hi", "en"]
     )
     language_detect_window_s: float = Field(15, ge=10, le=20)
+    indic_asr_enabled: bool = True
+    indic_asr_model_dir: Path = Field(
+        Path(
+            "models--ai4bharat--indic-conformer-600m-multilingual/snapshots/"
+            "2a77d305038dfc502fd9464e7d028b90381976cb"
+        ),
+        repr=False,
+    )
+    indic_asr_languages: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda data: [
+            lang for lang in ["kn", "hi", "ta"] if lang in data.get("supported_languages", [])
+        ]
+    )
     language_lock_min_chunks: int = Field(2, ge=1)
     language_lock_threshold: float = Field(0.6, ge=0, le=1)
     language_uncertain_threshold: float = Field(0.5, ge=0, le=1)
@@ -223,6 +236,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "supported_languages",
+        "indic_asr_languages",
         "allowed_audio_extensions",
         "allowed_client_networks",
         "cors_allowed_origins",
@@ -253,6 +267,14 @@ class Settings(BaseSettings):
         values = list(dict.fromkeys(value.lower() for value in values))
         if not values or any(value not in _LANGUAGE_CODES for value in values):
             raise ValueError("Unsupported language configuration")
+        return values
+
+    @field_validator("indic_asr_languages")
+    @classmethod
+    def valid_indic_languages(cls, values: list[str], info: ValidationInfo) -> list[str]:
+        values = list(dict.fromkeys(value.lower() for value in values))
+        if any(value not in info.data.get("supported_languages", []) for value in values):
+            raise ValueError("Indic ASR languages must be supported server languages")
         return values
 
     @field_validator("libretranslate_enabled_pairs")
@@ -325,9 +347,12 @@ class Settings(BaseSettings):
             value = getattr(self, name)
             if name in {"auth_allowed_uids", "auth_allowed_emails"}:
                 result[f"{name}_count"] = len(value)
-            elif name in {"models_dir", "data_dir", "firebase_credentials_path"} or name.endswith(
-                ("_api_key", "_shared_secret", "_signing_key")
-            ):
+            elif name in {
+                "models_dir",
+                "data_dir",
+                "firebase_credentials_path",
+                "indic_asr_model_dir",
+            } or name.endswith(("_api_key", "_shared_secret", "_signing_key")):
                 result[f"{name}_set"] = bool(value)
             elif name in {
                 "calendar_account",

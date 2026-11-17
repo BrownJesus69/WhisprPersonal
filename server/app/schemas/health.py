@@ -78,7 +78,16 @@ class FeaturesInfo(BaseModel):
     cloud_whisper: bool
 
 
+class IndicASRInfo(BaseModel):
+    status: Literal["ready", "not_loaded", "not_configured", "error"]
+    languages: list[str]
+    model: Literal["ai4bharat/indic-conformer-600m-multilingual"] = (
+        "ai4bharat/indic-conformer-600m-multilingual"
+    )
+
+
 class HealthResponse(BaseModel):
+    indic_asr: IndicASRInfo
     integrations: dict[str, Any] = Field(default_factory=dict)
     translation: dict[str, Any] = Field(default_factory=dict)
     status: Literal["ok", "degraded"]

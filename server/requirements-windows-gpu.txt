@@ -1,3 +1,5 @@
 # Optional Windows CUDA runtime wheels; Linux Docker provides system CUDA libraries.
 nvidia-cublas-cu12==12.9.2.10
 nvidia-cudnn-cu12==9.28.1.4
+# IndicConformer CPU wheel: https://download.pytorch.org/whl/cpu
+torch==2.14.1

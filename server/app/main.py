@@ -45,7 +45,7 @@ from app.services.llm.usage import UsageRecorder
 from app.services.model_manager import ModelManager
 from app.services.state import ServerState
 from app.services.store import Store
-from app.services.transcription import FasterWhisperEngine
+from app.services.transcription import CompositeEngine, FasterWhisperEngine
 from app.services.translation.audio import AudioFallback
 from app.services.translation.jobs import TranslationJobService
 from app.services.translation.router import TranslationRouter
@@ -108,7 +108,10 @@ def create_app(
         app.state.grant_verifier = GrantVerifier(app.state.grant_service)
         app.state.broadcaster = Broadcaster()
         app.state.model_manager = ModelManager(settings, app.state.server_state)
-        app.state.engine = FasterWhisperEngine(app.state.model_manager, settings)
+        app.state.engine = await asyncio.to_thread(
+            CompositeEngine, FasterWhisperEngine(app.state.model_manager, settings), settings
+        )
+        app.state.indic_asr = app.state.engine.indic
         app.state.firestore_sync = (
             FirestoreSync(service, settings.firestore_timeout_s)
             if service.status == "ready"

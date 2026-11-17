@@ -1,11 +1,13 @@
 """Synchronous engine boundary; only the serialized worker executor calls this."""
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
 from app.config import Settings
+from app.services.indic_asr import IndicConformer
 from app.services.model_manager import ModelManager
 from app.services.overlap import Word
 
@@ -137,3 +139,55 @@ class FasterWhisperEngine:
             }:
                 raise EngineError(self.manager.state.model_error) from None
             raise EngineError("transcription_failed") from None
+
+
+class CompositeEngine:
+    """Called on the worker's single executor, including keyboard dictation."""
+
+    def __init__(self, whisper: TranscriptionEngine, settings: Settings) -> None:
+        self.whisper = whisper
+        self.settings = settings
+        model_dir = settings.indic_asr_model_dir
+        if not model_dir.is_absolute():
+            model_dir = settings.models_dir / model_dir
+        self.indic = IndicConformer(
+            model_dir, settings.indic_asr_languages, settings.indic_asr_enabled
+        )
+
+    def load_audio(self, path: Path) -> AudioClip:
+        return self.whisper.load_audio(path)
+
+    def speech_seconds(self, clip: AudioClip) -> float:
+        return self.whisper.speech_seconds(clip)
+
+    def detect(self, clip: AudioClip, profile: str) -> list[tuple[str, float]]:
+        return self.whisper.detect(clip, profile)
+
+    def transcribe(
+        self,
+        clip: AudioClip,
+        profile: str,
+        language: str,
+        hotwords: str | None,
+        on_segment: Callable[[SegmentOut], None],
+    ) -> EngineOutput:
+        if language in self.settings.indic_asr_languages and self.indic.available:
+            logger = logging.getLogger(__name__)
+            try:
+                text, words = self.indic.transcribe(clip.samples, language)
+            except Exception:
+                logger.warning(
+                    "Indic ASR failed; using Whisper", extra={"event": "indic_asr_failed"}
+                )
+            else:
+                if hotwords:
+                    logger.debug(
+                        "Personal words do not apply to Indic ASR",
+                        extra={"event": "indic_asr_hotwords_ignored"},
+                    )
+                if text:
+                    on_segment(
+                        SegmentOut(round(words[0].start * 1000), round(words[-1].end * 1000), text)
+                    )
+                return EngineOutput(text, words)
+        return self.whisper.transcribe(clip, profile, language, hotwords, on_segment)
