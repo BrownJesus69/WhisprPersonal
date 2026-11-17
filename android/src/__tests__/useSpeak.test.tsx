@@ -185,3 +185,15 @@ test('a new recording can start while the previous one is still being processed'
   expect(hook.result.current.session?.id).toBe('ses_' + 'f'.repeat(24));
   expect(await repo.session(id)).toMatchObject({ status: 'stopped' });
 });
+
+test('Done returns to the start screen and keeps the recording for History', async () => {
+  const hook = await renderHook(useSpeak);
+  await act(async () => { await hook.result.current.start(); });
+  await act(async () => { await hook.result.current.stop(); });
+  await act(async () => { await repo.updateSession(id, { status: 'finalized' }); await repo.upsertTranscript(transcriptRow(id, finalData({ sequence: 0, raw_text: 'hello' }))); });
+  await tick(); expect(hook.result.current.state).toBe('complete');
+  await act(async () => { await hook.result.current.done(); });
+  expect(hook.result.current.state).toBe('idle');
+  expect(hook.result.current.session).toBeNull();
+  expect(await repo.session(id)).toMatchObject({ status: 'finalized' });
+});

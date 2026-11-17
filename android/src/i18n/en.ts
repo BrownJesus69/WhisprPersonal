@@ -139,7 +139,7 @@ export const en = {
   permission: 'Microphone access is off.', openSettings: 'Open settings', failed: 'Could not update your recording.', retry: 'Try again',
   auto: 'Auto-detect', kn: 'Kannada · ಕನ್ನಡ', ta: 'Tamil · தமிழ்', hi: 'Hindi · हिन्दी', en: 'English',
   language: 'Language', languageChip: '{name} ⌄', searchLanguages: 'Search languages', recent: 'Recent',
-  autoHelp: 'Useful when the language is unknown. Choose a language if recognition is unreliable.',
+  autoHelp: 'Auto-detect often mistakes Kannada, Hindi and Tamil for English. Choose your language for the best results.',
   copy: 'Copy', copied: 'Copied.', share: 'Share', more: '⋯ More', original: 'Original', cleaned: 'Cleaned up',
   cleanupHelp: 'Fixes punctuation and removes fillers.', openHistory: 'Open in History', delete: 'Delete…',
   deleteTitle: 'Delete recording?',
@@ -153,5 +153,6 @@ export const en = {
   recoveryFailed: 'Recovering unfinished recordings did not finish. Saved audio files are kept. Reopen the app to try again.',
   uploadStartFailed: 'Uploading to your computer could not start. Your recordings are safe on this phone. Reopen the app to try again.',
   errorDetails: 'Details: {reason}',
+  done: 'Done',
   processingBackground: 'You can start a new recording now. This one keeps going and will appear in History.'
 } as const;

@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useSpeak } from '@/features/speak/useSpeak';
 import { Button } from '@/components/Button';
+import { ButtonRow } from '@/components/ButtonRow';
 import { TranscriptResult } from '@/components/ui/TranscriptResult';
 import { MicButton } from '@/components/ui/MicButton';
 import { LanguageChip } from '@/components/ui/LanguageChip';
@@ -73,7 +74,10 @@ export default function Speak() {
         <Text accessibilityLiveRegion="none" importantForAccessibility="no" style={{ ...typography.label, color: listening ? c.record : c.muted, textAlign: 'center', fontVariant: ['tabular-nums'] }}>{listening ? `● ${t('listening', { time: timer })}` : t('computer')}</Text>
         <LevelBars recording={listening && s.recording.phase === 'recording'} />
         {!complete && <MicButton elapsed={t('listening', { time: timer })} state={listening ? 'listening' : transitioning ? 'processing' : 'ready'} onPress={() => act(listening ? s.stop : s.start)} />}
-        {complete && <Button secondary label={t('again')} onPress={() => act(s.start)} />}
+        {complete && <ButtonRow>
+          <Button secondary label={t('done')} onPress={() => act(s.done)} />
+          <Button secondary label={t('again')} onPress={() => act(s.start)} />
+        </ButtonRow>}
         {complete && s.session && <TranscriptResult hideEditor key={s.session.id} session={s.session} text={s.draft} edit={s.editDraft} cleaned={s.cleaned} changeCleaned={s.changeCleaned} hasPolished={s.rows.some(r => !!r.polished_text)} flush={s.flushDraft} remove={s.remove} />}
         {listening && <Button secondary label={t('cancel')} onPress={() => Alert.alert(t('cancelTitle'), undefined, [
           { text: t('backRecording'), style: 'cancel' }, { text: t('keep'), onPress: () => act(s.stop) }, { text: t('discard'), style: 'destructive', onPress: () => act(s.remove) }

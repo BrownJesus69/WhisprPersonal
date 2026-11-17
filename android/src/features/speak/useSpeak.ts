@@ -188,6 +188,11 @@ export function useSpeak() {
     }
     lastChange.current = Date.now(); setState('processing');
   });
+  /** Back to the start screen. The recording and its text stay in History; edits are saved first. */
+  const done = async () => {
+    try { await flushDraft(); } catch { setDraftError(true); return; }
+    latest.current = null; signature.current = ''; setSession(null); setRows([]); setDraft(''); setCleanupNotice(''); setError(''); setState('idle');
+  };
   const remove = () => run(async () => {
     const current = latest.current;
     if (!current || !uid) return;
@@ -214,6 +219,6 @@ export function useSpeak() {
     if (key) AccessibilityInfo.announceForAccessibility(t(key));
   }, [state]);
   const retry = () => retryAction.current ? run(retryAction.current) : start();
-  return { retry, state, disconnected, session, rows, draft, editDraft, cleaned, changeCleaned, error, draftError, retentionNotice, cleanupNotice, flushDraft, start, stop, finish, remove,
+  return { retry, state, disconnected, session, rows, draft, editDraft, cleaned, changeCleaned, error, draftError, retentionNotice, cleanupNotice, flushDraft, start, stop, finish, remove, done,
     interrupted: session?.finalize_status === 'interrupted', recording, live, raw };
 }
