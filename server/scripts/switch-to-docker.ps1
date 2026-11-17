@@ -1,7 +1,8 @@
-# Windows PowerShell 5.1 compatible. Undoes switch-to-gpu.ps1: removes the sign-in task, stops the
-# native server, and starts the Docker server again (CPU).
+# Windows PowerShell 5.1 compatible. Undoes switch-to-gpu.ps1: stops the relay, removes the sign-in
+# task, stops the GPU server, and starts the Docker server again (CPU).
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
+& docker compose -p whisprpersonal-relay -f docker-compose.relay.yml down
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'stop-native.ps1')
 if (Get-ScheduledTask -TaskName 'WhisprPersonal server' -ErrorAction SilentlyContinue) {
     Unregister-ScheduledTask -TaskName 'WhisprPersonal server' -Confirm:$false

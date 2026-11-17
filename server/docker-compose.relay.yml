@@ -1,0 +1,18 @@
+# Native GPU mode (switch-to-gpu.bat): only this relay runs in Docker; Whisper runs on Windows.
+services:
+  relay:
+    image: nginx:1.27.3-alpine
+    ports:
+      - "${WHISPRPERSONAL_BIND:-0.0.0.0}:${WHISPRPERSONAL_PORT:-8000}:8080"
+    volumes:
+      - ./relay/nginx.conf:/etc/nginx/nginx.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"

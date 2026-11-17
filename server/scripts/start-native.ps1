@@ -1,10 +1,12 @@
 # Windows PowerShell 5.1 compatible. Runs the server directly on Windows so Whisper uses the GPU.
+# By default it listens on 127.0.0.1:8001 only; the Docker relay (docker-compose.relay.yml) keeps
+# serving the phone on port 8000, so Windows Firewall never has to be asked about Python.
 # Inside Docker Desktop (WSL2) every CUDA inference dies with SIGBUS (see docker-compose.yml).
 # Uses the same .env, ./data and ./models as Docker. Never prints or edits .env or secrets.
 # Restarts the server if it exits, like Docker's restart policy, unless -NoRestart is given.
 param(
-    [int]$Port = 8000,
-    [string]$BindHost = '0.0.0.0',
+    [int]$Port = 8001,
+    [string]$BindHost = '127.0.0.1',
     [string]$DataDir = '',
     [switch]$NoRestart
 )
