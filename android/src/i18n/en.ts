@@ -148,5 +148,9 @@ export const en = {
   searchHistory: 'Search recordings', emptyHistory: 'Your recordings will appear here.', eventsLink: 'Events, notes and briefs',
   metadata: '{time} · {language} · {duration}', appearance: 'Appearance', system: 'System', light: 'Light', dark: 'Dark',
   options: '⋯ Options', close: 'Close', transcript: 'Transcript', otherRecording: 'Another recording is active. Stop it before starting Speak.',
-  openRecording: 'Open recording', draftFailed: 'Your edit could not be saved. Copy your text before leaving.', draftUnsafe: 'The edited text is only on this screen.'
+  openRecording: 'Open recording', draftFailed: 'Your edit could not be saved. Copy your text before leaving.', draftUnsafe: 'The edited text is only on this screen.',
+  recoveryPartial: '{count} recording(s) could not be recovered automatically; their audio files are kept. Other recordings are uploading normally. Reason: {reason}',
+  recoveryFailed: 'Recovering unfinished recordings did not finish. Saved audio files are kept. Reopen the app to try again.',
+  uploadStartFailed: 'Uploading to your computer could not start. Your recordings are safe on this phone. Reopen the app to try again.',
+  errorDetails: 'Details: {reason}'
 } as const;

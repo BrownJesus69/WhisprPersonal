@@ -20,11 +20,11 @@ import { noteSync } from '@/lib/notes/noteSync';
 import { uploadService } from '@/lib/upload/uploadService';
 import { liveController } from '@/lib/live/liveController';
 import { useSettingsStore } from '@/state/settingsStore';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeContext, light, dark } from '@/theme';
 import { AuthGate } from '@/components/AuthGate';
 import { Banner } from '@/components/Banner';
@@ -47,7 +47,9 @@ function RecordingRuntime() {
     return () => { disposed = true; void aiRuntime.stop(); };
   }, [uid, url]);
   const [recoveredOwner, setRecoveredOwner] = useState<AppUser | null>(null);
-  const [recoveryError, setRecoveryError] = useState(false);
+  // A plain-language reason (or '' when fine). Recovery problems never block uploads.
+  const [recoveryError, setRecoveryError] = useState('');
+  const insets = useSafeAreaInsets();
   const [retentionNotice, setRetentionNotice] = useState('');
   const [noteSyncError, setNoteSyncError] = useState(false);
   useEffect(() => {
@@ -61,21 +63,28 @@ function RecordingRuntime() {
     let disposed = false;
     void uploadService.stop().then(repositories).then(async repo => {
       if (disposed) return;
-      if (!disposed) setRecoveryError(false);
+      if (!disposed) setRecoveryError('');
       const state = useRecordingStore.getState();
       const live = ref.current.isRecording || ref.current.isPaused ? state.sessionId : null;
-      await recoverSessions(repo, uid, live);
+      const recovery = await recoverSessions(repo, uid, live);
+      if (!disposed && recovery.failed.length) {
+        console.warn('[whispr] recovery', recovery.failed.join(' | '));
+        setRecoveryError(t('recoveryPartial', { count: String(recovery.failed.length), reason: recovery.failed[0] }));
+      }
       try {
         const result = await applySpeakRetention(uid, 'startup');
         if (!disposed) setRetentionNotice(result.failed ? t('retentionFailed') : result.pending ? t('deletePending') : '');
       } catch { if (!disposed) setRetentionNotice(t('retentionFailed')); }
       if (!disposed) setRecoveredOwner(user);
-    }).catch(() => { if (!disposed) setRecoveryError(true); });
+    }).catch(error => {
+      console.warn('[whispr] recovery', String(error));
+      if (!disposed) { setRecoveryError(t('recoveryFailed')); setRecoveredOwner(user); }
+    });
     return () => { disposed = true; };
   }, [uid, user]);
   useEffect(() => {
     let disposed = false;
-    if (uid && recoveredOwner === user && url) void uploadService.start(uid).catch(() => { if (!disposed) setRecoveryError(true); });
+    if (uid && recoveredOwner === user && url) void uploadService.start(uid).catch(error => { console.warn('[whispr] upload start', String(error)); if (!disposed) setRecoveryError(t('uploadStartFailed')); });
     return () => { disposed = true; void uploadService.stop(); };
   }, [uid, user, url, recoveredOwner]);
   useEffect(() => {
@@ -84,15 +93,18 @@ function RecordingRuntime() {
       void repositories().then(async repo => {
         const session = recording.sessionId ? await repo.session(recording.sessionId) : null;
         if (session && session.owner_uid !== uid) await recording.stop();
-      }).catch(() => { setRecoveryError(true); });
+      }).catch(error => { console.warn('[whispr] account check', String(error)); setRecoveryError(t('recoveryFailed')); });
     }
   }, [uid]);
-  return <>
+  const notices = !!retentionNotice || aiError || !!recoveryError || noteSyncError;
+  // Screens handle their own top inset; these app-wide notices sit above them, so they must clear
+  // the status bar themselves.
+  return <View style={{ paddingTop: notices ? insets.top : 0 }}>
     {!!retentionNotice && <InlineNotice title={retentionNotice} safety={t('retentionSafe')} action={t('connect')} onPress={() => router.push('/connect')} />}
     {aiError && <Banner message="AI requests could not resume. Reopen the app to retry. Raw transcript is preserved." />}
-    {recoveryError && <Banner error message="Local audio recovery needs attention. Reopen the app to retry. Saved files are retained." />}
+    {!!recoveryError && <Banner error message={recoveryError} />}
     {noteSyncError && <Banner error message="Notes sync could not start. Notes stay on this phone. Reopen the app to retry." />}
-  </>;
+  </View>;
 }
 
 export default function RootLayout() {

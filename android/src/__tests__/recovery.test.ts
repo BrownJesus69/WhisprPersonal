@@ -50,3 +50,24 @@ test('a rotated master is read relative to its origin and never borrows prior-ru
   await recoverSessions(repo,'owner',null,files);
   expect(reads).toEqual([0,0]); expect(saved[0]).toMatchObject({ sequence: 2, startMs: 10500, endMs: 10750, overlapMs: 0 });
 });
+
+test('one unrecoverable recording is skipped with a path-free reason; the others still recover', async () => {
+  const repo = new MemoryRepositories();
+  const broken = session({ id: 'ses_' + 'b'.repeat(24), next_sequence: 1, time_ms: 10000, master_uri: 'file:///broken.wav' });
+  const healthy = session({ id: 'ses_' + 'c'.repeat(24), next_sequence: 1, time_ms: 10000, master_uri: 'file:///healthy.wav' });
+  await repo.putSession(broken); await repo.putSession(healthy);
+  const master = Uint8Array.from({ length: 12000 * 32 }, (_, i) => i % 251);
+  const notify = jest.fn();
+  const files = { removeParts: jest.fn(), listChunkFiles: () => [], parseChunkName, masterExists: () => true,
+    readWavPcm: async function* (uri: string, from: number, to?: number) {
+      if (uri === broken.master_uri) throw new Error('read failed: file:///data/user/0/app/files/master.wav');
+      yield master.slice(from * 32, to === undefined ? undefined : to * 32);
+    },
+    writeChunk: jest.fn(async (_id: string, spec: ChunkSpec) => ({ chunkId: `r_${_id}_${spec.sequence}`, uri: 'new.wav', sizeBytes: spec.pcm.length + 44, sha256: 'a'.repeat(64) }))
+  } as unknown as RecoveryIO;
+  const result = await recoverSessions(repo, 'owner', null, files, notify);
+  expect(result.failed).toEqual(['recovery_failed: read failed: [path]']);
+  expect(await repo.session(broken.id)).toMatchObject({ last_error: 'recovery_failed: read failed: [path]' });
+  expect(await repo.session(healthy.id)).toMatchObject({ status: 'stopped', finalize_status: 'interrupted' });
+  expect(notify).toHaveBeenCalledTimes(1);
+});

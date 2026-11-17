@@ -36,8 +36,11 @@ export async function writeChunk(sessionId: string, spec: ChunkSpec) {
   const handle = file.open();
   try { await handle.writeBytes(wavHeader(spec.pcm.length)); await handle.writeBytes(spec.pcm); }
   finally { handle.close(); }
-  file.move(new File(dir, name));
-  return { chunkId, ...await hashFile(file.uri) };
+  // File.move is asynchronous in Expo SDK 58; hash only once the rename has completed, and use
+  // the final path (never the .part path) as the stored chunk uri.
+  const final = new File(dir, name);
+  await file.move(final);
+  return { chunkId, ...await hashFile(final.uri) };
 }
 export function listChunkFiles(sessionId: string): File[] {
   const dir = chunkDirectory(sessionId);

@@ -6,7 +6,7 @@ module.exports = {
     name: 'WhisprPersonal',
     slug: 'whisprpersonal',
     scheme: 'whisprpersonal',
-    version: '1.1.0',
+    version: '1.1.1',
     platforms: ['android'],
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',
@@ -14,7 +14,7 @@ module.exports = {
     android: {
       package: 'com.aditya.whisprpersonal',
       // Bump with every installable build so a newer APK installs over an older one.
-      versionCode: 15,
+      versionCode: 16,
       // EAS cloud builds: provide google-services.json as an EAS *file* env var named
       // GOOGLE_SERVICES_JSON (the local file is git-ignored and not uploaded).
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './app/google-services.json',

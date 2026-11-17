@@ -10,6 +10,7 @@ import { updateEventStatus } from '@/lib/firebase/events';
 import { uploadService } from '@/lib/upload/uploadService';
 import { useAuthStore } from '@/state/authStore';
 import { useSettingsStore } from '@/state/settingsStore';
+import { safeReason } from '@/lib/errors/safeReason';
 import type { EventModel } from '@/types/models';
 
 export type RecordingPhase = 'idle' | 'requesting_permission' | 'ready' | 'recording' | 'paused' | 'stopping' | 'stopped' | 'error';
@@ -31,15 +32,6 @@ interface Dependencies {
 let attached: Recorder | undefined;
 export function attachRecorder(recorder: Recorder) { attached = recorder; }
 
-function saveFailureReason(error: unknown): string {
-  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown save error';
-  const safe = message
-    // Remove quoted paths (including spaces), then unquoted URIs and paths.
-    .replace(/["'](?:[a-z][a-z\d+.-]*:\/\/|[a-z]:[\\/]|\\\\|\/|\.{1,2}[\\/]|[\w.-]+[\\/])[^"']*["']/gi, '[path]')
-    .replace(/(?:[a-z][a-z\d+.-]*:\/\/|[a-z]:[\\/]|\\\\|\/|\.{1,2}[\\/]|\b[\w.-]+[\\/])[^\s"'<>]*/gi, '[path]')
-    .replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim();
-  return `chunk_save_failed: ${safe || 'Unknown save error'}`.slice(0, 200);
-}
 
 export function createRecordingStore(d: Dependencies) {
   let chunker: Chunker | undefined;
@@ -57,7 +49,7 @@ export function createRecordingStore(d: Dependencies) {
         ? 'Saving audio on this phone failed. The full recording is still being kept. Tap Stop, then reopen the app to recover it.'
         : 'Recording could not start, so nothing was recorded. Try again.' });
       try {
-        if (session) await (await d.repo()).updateSession(session.id, { last_error: saveFailureReason(error) });
+        if (session) await (await d.repo()).updateSession(session.id, { last_error: safeReason('chunk_save_failed', error) });
       } catch { /* Keep the recovery message even when the database is unavailable. */ }
     };
     const enqueue = (spec: ChunkSpec) => {

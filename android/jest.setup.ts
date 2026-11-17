@@ -101,7 +101,12 @@ jest.mock('expo-file-system', () => {
     get size() { return files.get(this.uri)?.length ?? 0; }
     create() { files.set(this.uri, new Uint8Array()); }
     delete() { files.delete(this.uri); }
-    move(to: File) { files.set(to.uri, files.get(this.uri)!); files.delete(this.uri); this.uri = to.uri; }
+    // Asynchronous like the native SDK 58 implementation: nothing moves until a later tick, so code
+    // that forgets to await move() reads a stale path and fails in tests as it does on a phone.
+    async move(to: File) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      files.set(to.uri, files.get(this.uri)!); files.delete(this.uri); this.uri = to.uri;
+    }
     async bytes() { return files.get(this.uri)!.slice(); }
     open() {
       if (!this.exists) throw new Error('Missing file');

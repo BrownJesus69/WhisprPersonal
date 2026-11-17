@@ -3,6 +3,7 @@ import { listChunkFiles, removeParts, hashFile, parseChunkName, readWavPcm, writ
 import { File } from 'expo-file-system';
 import { chunkRow, type Repositories } from '@/lib/db/repositories';
 import { updateEventStatus } from '@/lib/firebase/events';
+import { safeReason } from '@/lib/errors/safeReason';
 
 const io = { listChunkFiles, removeParts, hashFile, parseChunkName, readWavPcm, writeChunk, masterExists: (uri: string) => new File(uri).exists };
 export type RecoveryIO = typeof io;
@@ -10,10 +11,29 @@ export type RecoveryIO = typeof io;
 export function masterOrigin(uri: string): number {
   return Number(/master_(\d+)(?:_[a-f0-9]+)?\.wav$/.exec(uri)?.[1] ?? 0);
 }
-export async function recoverSessions(repo: Repositories, owner: string, liveSessionId: string | null, files: RecoveryIO = io, notify: () => void = () => {}) {
+/**
+ * Recovers every session independently: one recording that cannot be recovered records its reason
+ * in last_error and is skipped, so it never blocks the others or the upload service.
+ */
+export async function recoverSessions(repo: Repositories, owner: string, liveSessionId: string | null, files: RecoveryIO = io, notify: () => void = () => {}): Promise<{ failed: string[] }> {
   await repo.resetUploading(owner);
+  const failed: string[] = [];
   for (const original of await repo.sessions(owner)) {
     if (original.id === liveSessionId) continue;
+    try { await recoverOne(repo, original.id, files); }
+    catch (error) {
+      const reason = safeReason('recovery_failed', error);
+      failed.push(reason);
+      try { await repo.updateSession(original.id, { last_error: reason }); } catch { /* Reported via the returned list. */ }
+    }
+  }
+  notify();
+  return { failed };
+}
+
+async function recoverOne(repo: Repositories, id: string, files: RecoveryIO) {
+  {
+    const original = { id };
     files.removeParts(original.id);
     let chunks = await repo.chunks(original.id);
     for (const file of files.listChunkFiles(original.id)) {
@@ -24,14 +44,14 @@ export async function recoverSessions(repo: Repositories, owner: string, liveSes
       chunks = await repo.chunks(original.id);
     }
     const s = (await repo.session(original.id))!;
-    if (!s.consent_at) continue; // Ready session: native recording has never started.
+    if (!s.consent_at) return; // Ready session: native recording has never started.
     // 'interrupted' also covers a crash during this recovery pass.
-    if (!['recording','paused','interrupted'].includes(s.status)) continue;
+    if (!['recording','paused','interrupted'].includes(s.status)) return;
     await repo.updateSession(s.id, { status: 'interrupted', last_error: 'recording_interrupted' });
     if (!files.masterExists(s.master_uri)) {
       await repo.updateSession(s.id, { status: 'stopped', finalize_status: 'interrupted', last_error: 'master_unavailable' });
       updateEventStatus(s.event_id, 'processing');
-      continue;
+      return;
     }
     const origin = masterOrigin(s.master_uri);
     const last = chunks[chunks.length - 1];
@@ -52,5 +72,4 @@ export async function recoverSessions(repo: Repositories, owner: string, liveSes
     await repo.updateSession(s.id, { status: 'stopped', time_ms: chunker.timeMs, next_sequence: chunker.nextSequence, finalize_status: 'interrupted' });
     updateEventStatus(s.event_id, 'processing');
   }
-  notify();
 }
