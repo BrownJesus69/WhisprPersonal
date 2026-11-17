@@ -37,8 +37,8 @@ microphone permission is requested only when Start is pressed after session cons
 A release APK builds locally with **every cache and temp file on E:**
 (`scripts/windows-build/build-apk.ps1`): Android SDK copy, Gradle home, npm cache, TEMP
 and `ANDROID_USER_HOME` all live in `E:\whispr-build-cache`. Verified result: `BUILD
-SUCCESSFUL in 7m 56s` (2026-11-17), `app-release.apk` (48.0 MB, `arm64-v8a` only, debug-signed,
-`com.aditya.whisprpersonal` 1.1.1, versionCode 16). Latest APK: the repository's GitHub Releases page. Google Sign-In is enabled by setting
+SUCCESSFUL in 7m 17s` (2026-11-17), `app-release.apk` (48.0 MB, `arm64-v8a` only, debug-signed,
+`com.aditya.whisprpersonal` 1.1.2, versionCode 17). Latest APK: the repository's GitHub Releases page. Google Sign-In is enabled by setting
 `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` in the shell for that build only (no `.env` file); the APK
 contained the button and a `default_web_client_id` matching it. The shared React Native debug
 key (SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`) is registered in
