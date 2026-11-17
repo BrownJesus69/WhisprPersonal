@@ -63,19 +63,26 @@ if ($tailscaleUrl) {
 }
 
 # 3. Server comes back by itself after a reboot.
-$dockerSettings = Join-Path $env:APPDATA 'Docker\settings-store.json'
-if (Test-Path -LiteralPath $dockerSettings) {
-    $autoStart = (Get-Content -LiteralPath $dockerSettings -Raw | ConvertFrom-Json).AutoStart
-    if ($autoStart -eq $true) { Ok 'Docker Desktop starts when you sign in to Windows.' }
-    else { Fail 'Docker Desktop does not start at sign-in: Docker Desktop > Settings > General > "Start Docker Desktop when you sign in".' }
+$nativeTask = Get-ScheduledTask -TaskName 'WhisprPersonal server' -ErrorAction SilentlyContinue
+if ($nativeTask) {
+    # Native GPU mode (switch-to-gpu.bat): a sign-in task starts the server; Docker is not used.
+    if ($nativeTask.State -ne 'Disabled') { Ok 'Server starts on the GPU when you sign in to Windows (task "WhisprPersonal server").' }
+    else { Fail 'The "WhisprPersonal server" sign-in task is disabled: enable it in Task Scheduler.' }
 } else {
-    Warn 'Could not read Docker Desktop settings; make sure it starts when you sign in.'
-}
-& cmd.exe /d /c "docker inspect -f {{.HostConfig.RestartPolicy.Name}} server-server-1 >nul 2>&1"
-if ($LASTEXITCODE -eq 0) {
-    $policy = (& docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' server-server-1).Trim()
-    if ($policy -in @('unless-stopped', 'always')) { Ok "Server container restarts automatically ($policy)." }
-    else { Fail "Server container restart policy is '$policy'; expected unless-stopped." }
+    $dockerSettings = Join-Path $env:APPDATA 'Docker\settings-store.json'
+    if (Test-Path -LiteralPath $dockerSettings) {
+        $autoStart = (Get-Content -LiteralPath $dockerSettings -Raw | ConvertFrom-Json).AutoStart
+        if ($autoStart -eq $true) { Ok 'Docker Desktop starts when you sign in to Windows.' }
+        else { Fail 'Docker Desktop does not start at sign-in: Docker Desktop > Settings > General > "Start Docker Desktop when you sign in".' }
+    } else {
+        Warn 'Could not read Docker Desktop settings; make sure it starts when you sign in.'
+    }
+    & cmd.exe /d /c "docker inspect -f {{.HostConfig.RestartPolicy.Name}} server-server-1 >nul 2>&1"
+    if ($LASTEXITCODE -eq 0) {
+        $policy = (& docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' server-server-1).Trim()
+        if ($policy -in @('unless-stopped', 'always')) { Ok "Server container restarts automatically ($policy)." }
+        else { Fail "Server container restart policy is '$policy'; expected unless-stopped." }
+    }
 }
 
 # 4. Laptop stays awake while you are out.
@@ -92,7 +99,8 @@ Warn 'Leave the laptop plugged in with the lid open, or set "When I close the li
 if ($tailscaleUrl) {
     Write-Host ''
     Write-Host "Use this address in the app (works at home and outside): $tailscaleUrl"
-    & docker compose -f docker-compose.yml exec -T server python -m app.cli qr $tailscaleUrl
+    if ($nativeTask) { & (Join-Path (Get-Location) '.venv\Scripts\python.exe') -m app.cli qr $tailscaleUrl }
+    else { & docker compose -f docker-compose.yml exec -T server python -m app.cli qr $tailscaleUrl }
 }
 Write-Host ''
 if ($problems -eq 0) { Write-Host 'Remote access ready. Final check: on mobile data, tap Test connection in the app.' }

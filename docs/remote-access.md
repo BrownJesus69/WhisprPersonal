@@ -45,6 +45,23 @@ translation, and exports produced on the laptop.
 The Tailscale address (`100.x.y.z`) stays the same for this laptop. The MagicDNS name
 (`laptop-name.tailnet-name.ts.net`) also works and is accepted by the app.
 
+## Faster transcription on the GPU (optional)
+
+Docker Desktop on this laptop cannot run Whisper on the GPU: every GPU inference inside the
+container crashes (SIGBUS), so the Docker server transcribes on the CPU (about 7 s per 10 s of
+speech). Running the server directly on Windows uses the GPU (about 1.5 to 2 s).
+
+1. At the laptop, double-click `server\switch-to-gpu.bat`. It:
+   - stops the Docker server;
+   - adds a "WhisprPersonal server" task that starts the server when you sign in;
+   - starts the server and runs the remote check.
+2. If Windows Firewall asks whether Python may accept connections, tick **Private networks** and
+   click **Allow**. Tailscale counts as a private network on this laptop, so without this your
+   phone cannot reach the server from outside.
+3. Logs: `server\data\logs\server-native.log`.
+
+To go back to Docker, double-click `server\switch-to-docker.bat`.
+
 ## Troubleshooting
 
 | Symptom | Fix |
